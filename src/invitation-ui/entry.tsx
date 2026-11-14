@@ -68,7 +68,7 @@ function Workspace(){
  const action=(event:ToolbarAction)=>{
  if(event.type==='view'){setListOpen(event.view==='list');return}
  if(event.type==='logs'){setLogsOpen(true);return}if(event.type==='records'){setRecordsOpen(true);return}
- if(event.type==='return'){void run(async()=>{const observed=await invitationRequest('INVITE_OBSERVE');if(!observed.observation?.readiness)throw Error('请先完成登录并等待网页列表加载');const ids=await invitationRuntime.queryData<string[]>({kind:'invite_ids',platform:context?.platform,accountId,ids:inviteIds});if(!ids.length)throw Error('没有无邀约记录的达人');setInviteIds(ids);setListOpen(true);closeCompose(true);setPending(false)});return}
+ if(event.type==='return'){void run(async()=>{const observed=await invitationRequest('INVITE_OBSERVE');if(observed.observation?.account?.status!=='online'||observed.observation?.account?.shopId!==accountId)throw Error('请先完成当前账号登录');const ids=await invitationRuntime.queryData<string[]>({kind:'invite_ids',platform:context?.platform,accountId,ids:inviteIds});if(!ids.length)throw Error('没有无邀约记录的达人');setInviteIds(ids);setListOpen(true);closeCompose(true);setPending(false)});return}
  void run(()=>request(event.type==='collect'?'INVITE_TOOLBAR_COLLECT':event.type==='stop'?'INVITE_TOOLBAR_STOP':'INVITE_TOOLBAR_NAV',{action:event.type}))
  }
  const platform=context?.platform || 'douyin', collectTask=tasks[`${accountId}:collect`],inviteTask=tasks[`${accountId}:invite`]
