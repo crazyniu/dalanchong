@@ -17,7 +17,7 @@ test('only top-frame supported source is a toolbar surface',()=>{
 });
 test('standalone UI cannot be embedded in an unrelated site',()=>{
  assert.equal(invitationSurface({...sender,url:root+'invite.html'},runtime),null);
- assert.equal(invitationSurface({...sender,url:root+'invite.html',tab:{id:9,url:root+'invite.html'}},runtime).kind,'page');
+ assert.equal(invitationSurface({...sender,url:root+'invite.html',tab:{id:9,url:root+'invite.html'}},runtime),null);
 });
 test('selected export returns selected rows only and does not add foreign IDs',()=>{
  assert.deepEqual(selectedExport([{id:'1'},{id:'2'}],['2','foreign'],false),[{id:'2'}]);

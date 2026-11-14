@@ -1,6 +1,6 @@
 /**
  * AI module map
- * Purpose: standalone invitation UI, explicit activation, scoped sources, lists and tasks.
+ * Purpose: in-page invitation UI behind the shared license gate, scoped sources, lists and tasks.
  * Entry: invite.html; runtime messages delegate every privileged action to background.
  * Flow: prepare source, observe account, collect, select creators and explicitly submit invitations.
  * State: drafts/selections stay in memory; explicit save persists per-account config through background.
@@ -10,16 +10,75 @@
 import {invitationSources, invitationSource} from './invite-sources.js';
 import {requirePageLicense} from './license-ui.js';
 
+if (window.top === window) {
+  location.replace(chrome.runtime.getURL('popup.html'));
+  await new Promise(() => {});
+}
 await requirePageLicense();
 const embedded = new URLSearchParams(location.search).get('embedded') === '1' && window.top !== window;
 if (embedded) document.body.dataset.embedded = '';
 
 const $ = id => document.getElementById(id);
 const fields = ['products', 'message', 'phone', 'wechat', 'interval', 'limit'];
-const drafts = {
-  douyin: {products: '', message: '', phone: '', wechat: '', interval: '5000', limit: ''},
-  kuaishou: {products: '', message: '', phone: '', wechat: '', interval: '2000', limit: ''},
-};
+const drafts = new Map();
+let draftScope = null, composeCount = null;
+let memoryRevision = 0, memoryTimer;
+const loadedScopes = new Set();
+const memoryKey = scope => 'invite-workspace:' + scope;
+const emptyDraft = () => ({products: '', message: '', phone: '', wechat: '', interval: platform === 'douyin' ? '5000' : '2000', limit: ''});
+function rememberDraft() {
+  if (draftScope) drafts.set(draftScope, Object.fromEntries(fields.map(field => [field, $(`invite-${field}`).value])));
+}
+function switchDraftScope(key) {
+  if (draftScope === key) return;
+  clearTimeout(memoryTimer);
+  rememberDraft(); void persistWorkspace(); draftScope = key; composeCount = null; memoryRevision++;
+  if (key) void restoreWorkspace(key);
+  $('compose-sheet').close(); applyPlatformFields();
+}
+async function persistWorkspace() {
+  if (!draftScope) return;
+  const key = draftScope;
+  rememberDraft();
+  try {
+    await chrome.storage.session.set({[memoryKey(key)]: {draft: drafts.get(key), talents: [...selected], records: [...selectedRecords]}});
+  } catch (error) { showError(Error('临时工作区保存失败：' + error.message)); }
+}
+async function restoreWorkspace(key) {
+  if (loadedScopes.has(key)) return;
+  loadedScopes.add(key);
+  const revision = memoryRevision;
+  try {
+    const saved = (await chrome.storage.session.get(memoryKey(key)))[memoryKey(key)];
+    if (!saved || draftScope !== key || revision !== memoryRevision) return;
+    if (saved.draft && fields.every(field => typeof saved.draft[field] === 'string')) {
+      drafts.set(key, Object.fromEntries(fields.map(field => [field, saved.draft[field]])));
+      applyPlatformFields();
+    }
+    for (const [values, set] of [[saved.talents, selected], [saved.records, selectedRecords]]) {
+      if (Array.isArray(values) && values.length <= 10000 && values.every(id => typeof id === 'string')) {
+        set.clear(); values.forEach(id => set.add(id));
+      }
+    }
+    renderRows();
+  } catch (error) { loadedScopes.delete(key); showError(Error('临时工作区恢复失败：' + error.message)); }
+}
+function queueWorkspaceSave() {
+  if (!draftScope) return;
+  memoryRevision++; clearTimeout(memoryTimer);
+  memoryTimer = setTimeout(() => { void persistWorkspace(); }, 250);
+}
+for (const event of ['input', 'change', 'click']) document.addEventListener(event, queueWorkspaceSave);
+window.addEventListener('pagehide', () => { clearTimeout(memoryTimer); void persistWorkspace(); });
+async function eligibleIds() {
+  const current = sessionId, scope = draftScope;
+  const selectedIds = new Set(selected);
+  const result = await request('INVITE_TALENT_IDS', {sessionId: current,
+    filters: selectedIds.size ? {} : appliedFilters.talents, excludeInvited: true});
+  if (current !== sessionId || scope !== draftScope) throw Error('当前账号已改变，请重新打开邀约配置。');
+  if (!Array.isArray(result.ids) || result.ids.some(id => typeof id !== 'string') || result.ids.length > 10000) throw Error('可邀约名单无效。');
+  return selectedIds.size ? result.ids.filter(id => selectedIds.has(id)) : result.ids;
+}
 let platform = 'douyin';
 let selectedTabId = null;
 let refreshing = false;
@@ -88,7 +147,14 @@ async function refreshSources() {
     if (requestedPlatform !== platform) void refreshSources();
   }
 }
-$('open-compose').addEventListener('click', () => { $('compose-sheet').showModal(); });
+$('open-compose').addEventListener('click', () => run(async () => {
+  if (!sessionId || !draftScope || !license.valid) throw Error('请先准备当前账号。');
+  const ids = await eligibleIds();
+  composeCount = ids.length;
+  $('invite-limit').value = ''; rememberDraft();
+  $('compose-summary').textContent = `${observation?.account?.shopName || '当前账号'} · 可邀约 ${composeCount} 人（已排除已有记录）`;
+  $('compose-sheet').showModal();
+}));
 $('close-compose').addEventListener('click', () => { $('compose-sheet').close(); });
 $('refresh-sources').addEventListener('click', refreshSources);
 $('focus-source').addEventListener('click', async () => {
@@ -107,7 +173,7 @@ $('invite-config').addEventListener('submit', event => {
   void run(async () => {
     if (!sessionId || !license.valid || !observation?.readiness) throw Error('请确认授权、来源和已选达人。');
     const config = readConfig();
-    const ids = selected.size ? [...selected] : (await request('INVITE_TALENT_IDS', {sessionId, filters: {...appliedFilters.talents, invitationStatus: 'uninvited'}})).ids;
+    const ids = await eligibleIds();
     if (!ids.length) throw Error('当前筛选中没有未处理达人。');
     await request('INVITE_SEND', {sessionId, config, ids});
     $('compose-sheet').close();
@@ -115,7 +181,7 @@ $('invite-config').addEventListener('submit', event => {
   });
 });
 $('invite-config').addEventListener('input', () => {
-  for (const field of fields) drafts[platform][field] = $(`invite-${field}`).value;
+  rememberDraft();
 });
 $('invite-platform').addEventListener('change', () => run(async () => {
   const nextPlatform = $('invite-platform').value;
@@ -128,7 +194,8 @@ $('invite-platform').addEventListener('change', () => run(async () => {
   applyPlatformFields();
 }));
 function applyPlatformFields() {
-  for (const field of fields) $(`invite-${field}`).value = drafts[platform][field];
+  const draft = draftScope ? drafts.get(draftScope) || emptyDraft() : emptyDraft();
+  for (const field of fields) $(`invite-${field}`).value = draft[field];
   const douyin = platform === 'douyin';
   $('contact-hint').textContent = douyin ? '抖音手机号和微信号至少填写一项。' : '快手联系方式可选：填写后覆盖平台联系方式，留空时使用平台返回的联系方式。';
   $('product-hint').hidden = !douyin;
@@ -159,14 +226,11 @@ function updateControls() {
   $('invite-platform').disabled = busy || embedded;
   $('open-compose').disabled = busy || !sessionId || !license.valid;
   $('collect').disabled = busy || !sessionId || !license.valid || !observation?.readiness;
-  $('start-invite').disabled = busy || !sessionId || !license.valid || !observation?.readiness;
-  $('start-invite').textContent = selected.size ? `开始邀约（所选 ${selected.size} 人）` : '邀约当前筛选的未处理达人';
+  $('start-invite').disabled = busy || !sessionId || !license.valid || !observation?.readiness || composeCount === 0;
+  $('start-invite').textContent = composeCount === null ? '开始邀约' : `开始邀约（${composeCount} 人）`;
   $('export-rows').textContent = (view === 'talents' ? selected.size : selectedRecords.size) ? '导出所选 CSV' : '导出当前筛选 CSV';
   // Stop is independent of authorization and in-flight action buttons.
   for (const id of ['stop-task', 'stop-collect', 'stop-invite']) $(id).disabled = !sessionId;
-  $('activate').disabled = busy;
-  $('verify-license').disabled = busy || !license.hasCode;
-  $('refresh-status').disabled = busy;
   $('delete-talents').disabled = busy || !sessionId || !license.valid || !selected.size;
   for (const id of ['select-filtered', 'export-rows', 'save-config', 'load-config', 'load-tasks']) $(id).disabled = busy || !sessionId || !license.valid;
   $('record-selection-status').textContent = `已选 ${selectedRecords.size} 条`;
@@ -196,6 +260,7 @@ async function clearSession() {
       if (!error.message.includes('准备状态已失效')) throw error;
     }
   }
+  switchDraftScope(null);
   $('task-history').replaceChildren(); $('event-logs').replaceChildren();
   selectedRecords.clear(); logOffset = 0; logRows = [];
   sessionId = null; observation = null; selected.clear(); offset = 0; rows = []; rowEpoch++;
@@ -207,12 +272,14 @@ function applyObservation(value) {
   const account = value?.account;
   if (account?.status === 'online' && account.shopId && license.principalId) {
     const key = JSON.stringify([license.principalId, platform, account.shopId]);
+    switchDraftScope(key);
     if (selectionScope !== key) {
       rememberSelection(); selectionScope = key; selected.clear(); selectedRecords.clear();
       const saved = scopeSelections.get(key);
       saved?.talents.forEach(id => selected.add(id)); saved?.records.forEach(id => selectedRecords.add(id));
     }
   }
+  if (account?.status !== 'online') switchDraftScope(null);
   $('observation-status').textContent = account?.status === 'online'
     ? `${account.shopName || '平台账号'}（${account.shopId}） · ${value.readiness ? '来源已就绪' : '等待当前页面列表响应，请在来源页切换筛选。'}`
     : '尚未观察到有效账号，请在来源页面登录并操作筛选。';
@@ -221,10 +288,9 @@ function applyObservation(value) {
 async function refreshStatus() {
   const state = await request('INVITE_STATUS');
   if (license.principalId && (!state.license.valid || state.license.principalId !== license.principalId)) {
-    await clearSession(); scopeSelections.clear();
+    await clearSession(); scopeSelections.clear(); drafts.clear(); loadedScopes.clear();
   }
   license = state.license;
-  $('license-status').textContent = license.message || (license.valid ? '授权有效' : '尚未取得有效授权');
   tasks = state.tasks || []; renderTasks();
   updateControls();
 }
@@ -336,16 +402,6 @@ function readConfig() {
     throw Error('抖音话术不超过 150 字，手机号和微信号至少填写一项。');
   return config;
 }
-$('license-form').addEventListener('submit', event => {
-  event.preventDefault();
-  void run(async () => {
-    const code = $('activation-code').value.trim(); $('activation-code').value = '';
-    if (!code) throw Error('请输入激活码。');
-    await request('INVITE_ACTIVATE', {code}); await refreshStatus();
-  });
-});
-$('verify-license').addEventListener('click', () => run(async () => { await request('INVITE_VERIFY'); await refreshStatus(); }));
-$('refresh-status').addEventListener('click', () => run(refreshStatus));
 $('prepare-source').addEventListener('click', () => run(async () => {
   await clearSession();
   const result = await request('INVITE_PREPARE', {tabId: selectedTabId, platform});
@@ -373,7 +429,12 @@ $('delete-talents').addEventListener('click', () => run(async () => {
   await request('INVITE_DELETE_TALENTS', {sessionId, ids});
   selected.clear(); offset = 0; await refreshRows();
 }));
-for (const target of ['talents', 'records']) $(target + '-tab').addEventListener('click', () => run(async () => {
+async function showWorkspaceView(target) {
+  if (target === 'logs') {
+    $('logs-panel').open = true;
+    await refreshLogs(); $('logs-panel').scrollIntoView(); return;
+  }
+  if (!['talents', 'records'].includes(target)) return;
   view = target; offset = 0;
   $('filter-query').value = appliedFilters[view].query || '';
   for (const name of ['talents', 'records']) {
@@ -381,7 +442,11 @@ for (const target of ['talents', 'records']) $(target + '-tab').addEventListener
     $(name + '-tab').setAttribute('aria-pressed', String(name === view));
   }
   await refreshRows();
-}));
+}
+for (const target of ['talents', 'records']) $(target + '-tab').addEventListener('click', () => run(() => showWorkspaceView(target)));
+window.addEventListener('hashchange', () => {
+  if (embedded && sessionId && license.valid) void run(() => showWorkspaceView(location.hash.slice(1)));
+});
 $('page-size').addEventListener('change', () => run(async () => { offset = 0; await refreshRows(); }));
 $('previous-page').addEventListener('click', () => run(async () => { offset = Math.max(0, offset - Number($('page-size').value)); await refreshRows(); }));
 $('next-page').addEventListener('click', () => run(async () => { offset += Number($('page-size').value); await refreshRows(); }));
@@ -399,8 +464,9 @@ $('load-config').addEventListener('click', () => run(async () => {
   for (const field of fields) {
     const value = config[field === 'limit' ? 'maxInvites' : field];
     $(`invite-${field}`).value = value == null ? '' : String(value);
-    drafts[platform][field] = $(`invite-${field}`).value;
+    // Explicitly loaded configuration becomes only this account's in-memory draft.
   }
+  rememberDraft();
   $('rows-status').textContent = '已读取当前账号配置，请检查后再开始邀约。';
 }));
 $('load-tasks').addEventListener('click', () => run(async () => {
@@ -447,12 +513,12 @@ function readFilters() {
 }
 $('list-filters').addEventListener('submit', event => {
   event.preventDefault(); void run(async () => {
-    appliedFilters[view] = readFilters(); selected.clear(); selectedRecords.clear(); offset = 0; await refreshRows();
+    appliedFilters[view] = readFilters(); offset = 0; await refreshRows();
   });
 });
 $('reset-filters').addEventListener('click', () => run(async () => {
   $('list-filters').reset(); appliedFilters.talents = {}; appliedFilters.records = {};
-  selected.clear(); selectedRecords.clear(); offset = 0; await refreshRows();
+  offset = 0; await refreshRows();
 }));
 $('select-filtered').addEventListener('click', () => run(async () => {
   const current = sessionId;
@@ -589,16 +655,7 @@ async function initializeWorkspace() {
     await refreshStatus();
     const result = await request('INVITE_PREPARE', {tabId: selectedTabId, platform});
     sessionId = result.sessionId; applyObservation(result.observation);
-    const initialView = new URLSearchParams(location.search).get('view');
-    if (initialView === 'records') {
-      view = 'records';
-      for (const name of ['talents', 'records']) {
-        $(name + '-tab').className = `btn ${name === view ? 'primary' : 'outline'}`;
-        $(name + '-tab').setAttribute('aria-pressed', String(name === view));
-      }
-    }
-    await refreshRows();
-    if (initialView === 'logs') { $('logs-panel').open = true; await refreshLogs(); $('logs-panel').scrollIntoView(); }
+    await showWorkspaceView(location.hash.slice(1) || 'talents');
   } catch (error) { showError(error); }
   finally { void poll(); }
 }

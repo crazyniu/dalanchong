@@ -155,7 +155,7 @@ async function handle(message, surface, cancelled = () => false) {
   if (message.type === 'INVITE_CONFIG_SAVE') return {config: await store.saveConfig(scope, message.config)};
   if (message.type === 'INVITE_REVIEW') return {record: await store.resolveReview(scope, message.talentId, message.result)};
   if (message.type === 'INVITE_TASKS') return {rows: await store.listTasks(scope, {limit: 1000})};
-  if (message.type === 'INVITE_TALENT_IDS') return {ids: await store.listTalentIds(scope, message.filters)};
+  if (message.type === 'INVITE_TALENT_IDS') return {ids: await store.listTalentIds(scope, message.filters, message.excludeInvited === true)};
   if (message.type === 'INVITE_EXPORT') return {rows: selectedExport(await store.exportRows(scope, message.ids ? {} : message.filters, message.view === 'records'), message.ids, message.view === 'records')};
   if (message.type === 'INVITE_DELETE_TALENTS') return {deleted: await store.deleteTalents(scope, message.ids)};
   if (message.type === 'INVITE_TALENTS' || message.type === 'INVITE_RECORDS') {
@@ -190,9 +190,10 @@ async function toolbar(message, surface) {
   await initialize(); const epoch = licenseEpoch(); requireLicense(epoch);
   if (message.type === 'INVITE_TOOLBAR_STOP') toolbarGenerations.set(surface.tabId,(toolbarGenerations.get(surface.tabId) || 0)+1);
   const generation = toolbarGenerations.get(surface.tabId) || 0;
+  let toolbarObservation = null;
   let entry = [...sessions].find(([, item]) => item.page.tabId === surface.tabId && item.page.platform === surface.source.platform);
   if (entry) {
-    try { await observe(entry[1]); entry[1].owners.add(surface.owner); }
+    try { toolbarObservation = await observe(entry[1]); entry[1].owners.add(surface.owner); }
     catch { if (entry[1].scope) runtime.stop(entry[1].scope); sessions.delete(entry[0]); entry = null; }
   }
   if (message.type === 'INVITE_TOOLBAR_STATUS' && !entry) {
@@ -200,7 +201,7 @@ async function toolbar(message, surface) {
     if (!last || last.url !== surface.source.origin + surface.source.path || Date.now() - last.at > 30000) {
       try {
         const prepared = await handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface);
-        entry = [prepared.sessionId,sessionFor(prepared.sessionId)]; preparationFailures.delete(surface.tabId);
+        entry = [prepared.sessionId,sessionFor(prepared.sessionId)]; toolbarObservation = prepared.observation; preparationFailures.delete(surface.tabId);
       } catch (error) {
         preparationFailures.set(surface.tabId,{url:surface.source.origin + surface.source.path,at:Date.now(),message:error.message});
       }
@@ -210,7 +211,7 @@ async function toolbar(message, surface) {
     if (preparations.has(surface.tabId)) throw new Error('正在准备当前页面，请稍候');
     const prepare = handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface);
     preparations.set(surface.tabId,prepare);
-    try { const prepared = await prepare; entry = [prepared.sessionId, sessionFor(prepared.sessionId)]; }
+    try { const prepared = await prepare; entry = [prepared.sessionId, sessionFor(prepared.sessionId)]; toolbarObservation = prepared.observation; }
     finally { preparations.delete(surface.tabId); }
   }
   const session = entry?.[1];
@@ -232,7 +233,9 @@ async function toolbar(message, surface) {
   const total = session?.scope ? (await store.listTalentIds(session.scope, {})).length : 0;
   requireLicense(epoch);
   const current = session?.scope ? runtime.status().filter(t => t.platform === session.scope.platform && t.platformAccountId === session.scope.platformAccountId && t.status === 'running') : [];
-  return {accountName:session?.account?.name || session?.account?.shopName || '',total,
+  const loggedIn = session?.account?.status === 'online' && !!session?.scope;
+  const taskProgress = tasks.slice(-2).map(task => ({kind:task.kind,status:task.status,processed:task.processed,total:task.total,success:task.success,failed:task.failed,skipped:task.skipped,review:task.review,retryAt:task.retryAt}));
+  return {loggedIn, readiness:loggedIn && toolbarObservation?.readiness === true, tasks:taskProgress, accountName:session?.account?.name || session?.account?.shopName || '',total,
     collecting:current.some(t => t.kind === 'collect'), inviting:current.some(t => t.kind === 'invite'),
     progress:current.map(t => `${t.kind === 'collect' ? '采集' : '邀约'} ${t.processed}/${t.total} · 成功 ${t.success} · 跳过 ${t.skipped} · 失败 ${t.failed} · 待核实 ${t.review}${t.retryAt ? ' · 重试 '+Math.max(0,Math.ceil((t.retryAt-Date.now())/1000))+'秒' : ''}`).join('；'),
     status:session ? '当前账号已就绪' : (preparationFailures.get(surface.tabId)?.message || '请在网页筛选后采集')};

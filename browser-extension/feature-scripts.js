@@ -16,19 +16,6 @@ export const featureScripts = [
   },
   {
     "matches": [
-      "http://*/*",
-      "https://*/*"
-    ],
-    "js": [
-      "feature-gate.js",
-      "shop-label.js"
-    ],
-    "id": "licensed-feature-1",
-    "runAt": "document_idle",
-    "allFrames": false
-  },
-  {
-    "matches": [
       "https://compass.jinritemai.com/talent/video-rank*",
       "https://compass.jinritemai.com/talent/product-rank*",
       "https://compass.jinritemai.com/shop/chance/video-rank*",
@@ -134,7 +121,7 @@ export const featureScripts = [
   },
   {
     matches: ["https://buyin.jinritemai.com/*", "https://cps.kwaixiaodian.com/*"],
-    js: ["feature-gate.js", "invite-toolbar.js"],
+    js: ["feature-gate.js", "invite-toolbar.js", "invite-return.js"],
     id: "licensed-invite-toolbar",
     runAt: "document_idle",
     allFrames: false

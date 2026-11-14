@@ -2,7 +2,7 @@
 <!--
 AI file map
 Purpose: standalone creator invitation workspace with explicit authorization and task controls.
-Entry: popup opens invite.html; invite.js lists tabs and owns in-memory form state.
+Entry: platform toolbar embeds invite.html; invite.js lists tabs and owns in-memory form state.
 Boundary: background validates authorization and identity; configuration persists only on explicit save.
 -->
 <html lang="zh-CN" class="wa-light">
@@ -18,15 +18,6 @@ Boundary: background validates authorization and identity; configuration persist
   <section id="license-gate" aria-label="插件激活"><h1>激活大懒虫</h1><p role="status">正在读取授权状态…</p></section>
   <main class="workspace">
     <header class="page-heading"><div><p class="muted">大懒虫</p><h1>达人邀约</h1></div><span class="stage">独立插件</span></header>
-    <details class="panel license-panel"><summary>授权管理</summary>
-      <div class="section-heading"><h2 id="license-title">插件授权</h2><button id="refresh-status" class="btn outline" type="button">刷新状态</button></div>
-      <p id="license-status" role="status">正在读取授权状态…</p>
-      <form id="license-form" class="license-form" autocomplete="off">
-        <label for="activation-code">激活码</label><input id="activation-code" type="password" autocomplete="off" required>
-        <button id="activate" class="btn primary" type="submit">激活</button>
-        <button id="verify-license" class="btn outline" type="button">重新验证</button>
-      </form>
-    </details>
     <p id="workspace-error" class="notice" role="alert" hidden></p>
     <section class="workspace-toolbar panel">
       <div class="section-heading"><div id="platform-control"><label>平台<select id="invite-platform" name="platform"><option value="douyin">抖音</option><option value="kuaishou">快手</option></select></label></div><button id="prepare-source" class="btn outline" type="button" disabled>重新准备</button><button id="open-compose" class="btn primary" type="button">配置并邀约</button></div>
@@ -73,6 +64,7 @@ Boundary: background validates authorization and identity; configuration persist
 <dialog id="compose-sheet" class="compose-sheet" aria-labelledby="config-title"><div class="sheet-heading"><h2 id="config-title">邀约配置</h2><button id="close-compose" class="btn outline" type="button">关闭</button></div>
 
         <p class="muted">默认仅保留本页草稿。可显式按当前账号保存至本机（含联系方式）；不会自动保存，只有点击开始邀约才会发送。</p>
+        <p id="compose-summary" role="status"></p>
         <form id="invite-config" autocomplete="off">
 
           <label>商品 ID<textarea required id="invite-products" name="products" rows="3" placeholder="每行一个商品 ID"></textarea></label>

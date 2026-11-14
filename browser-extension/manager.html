@@ -10,19 +10,26 @@ Boundary: IDs are the controller contract. The background owns validated media a
 <html lang="zh-CN" class="wa-light">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>抖音视频下载 · 大懒虫</title>
+  <title>视频批量下载 · 大懒虫</title>
   <link rel="icon" type="image/png" href="assets/icon-32.png">
   <link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="player.css"><link rel="stylesheet" href="manager.css">
   <link rel="stylesheet" href="license-ui.css">
+  <link rel="stylesheet" href="workspace-nav.css">
 </head>
 <body data-license-locked>
   <section id="license-gate" aria-label="插件激活"><h1>激活大懒虫</h1><p role="status">正在读取授权状态…</p></section>
-  <header class="topbar"><div class="topbar-inner">
-    <a class="brand" href="#videos"><img src="assets/logo.png" alt=""><strong>大懒虫</strong></a>
+<header class="workspace-header"><div class="workspace-header-inner">
+    <a class="workspace-brand" href="manager.html?view=captured"><img src="assets/logo.png" alt=""><strong>大懒虫</strong></a>
+    <nav class="workspace-nav" aria-label="主要功能">
+      <a href="manager.html?view=captured" aria-current="page">视频批量下载</a>
+      <button type="button" data-invitation-platform="douyin">抖音邀约</button>
+      <button type="button" data-invitation-platform="kuaishou">快手邀约</button>
+      <a href="settings.html">设置</a>
+    </nav>
   </div></header>
   <main class="page">
     <section id="videos-view" aria-labelledby="videos-title">
-      <div class="view-head"><h1 id="videos-title">抖音视频下载</h1></div>
+      <div class="view-head"><h1 id="videos-title">视频批量下载</h1></div>
       <form id="parse-form" class="parse card">
         <div class="parse-inputs">
           <label for="video-url" class="sr-only">抖音链接或分享文案，每行一个</label>

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "大懒虫",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "网页视频捕获、批量下载与抖音原画批量解析。",
   "minimum_chrome_version": "116",
   "permissions": [

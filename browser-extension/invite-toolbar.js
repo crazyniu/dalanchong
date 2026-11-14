@@ -14,7 +14,7 @@
   const style = document.createElement('style');
   style.textContent = `
     :host{all:initial!important;position:fixed!important;left:var(--left,50%)!important;top:var(--top,auto)!important;bottom:var(--bottom,16px)!important;transform:var(--shift,translateX(-50%))!important;z-index:2147483646!important;max-width:calc(100vw - 24px)!important;font:14px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif!important;color:#18181b!important}
-    *{box-sizing:border-box}button{font:inherit;color:inherit;cursor:pointer;border:1px solid #e4e4e7;border-radius:8px;padding:7px 10px;min-height:36px;background:white;white-space:nowrap}button:hover{background:#f4f4f5}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:2px solid #71717a;outline-offset:2px}button.primary{background:#18181b;color:white;border-color:#18181b}button.danger{color:#b91c1c;border-color:#fecaca}.bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px;background:#fff;border:1px solid #e4e4e7;border-radius:12px;box-shadow:0 8px 28px #18181b29;max-width:100%;width:max-content}.handle{touch-action:none;cursor:grab;user-select:none;font-weight:600;border:0;background:#f4f4f5}.info{display:flex;flex-direction:column;min-width:100px;max-width:190px;margin-right:6px}.account,.status{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.account{font-weight:600}.status{font-size:12px;color:#71717a}.nav{display:flex;gap:4px;border-right:1px solid #e4e4e7;padding-right:6px}.panel{position:fixed;right:16px;bottom:100px;width:min(960px,calc(100vw - 32px));height:min(720px,calc(100vh - 140px));min-height:180px;display:flex;flex-direction:column;background:#fff;border:1px solid #d4d4d8;border-radius:12px;overflow:hidden;box-shadow:0 12px 44px #18181b40}.panel[hidden]{display:none}.panel-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e4e4e7;background:#fafafa}.panel-head strong{flex:1}.panel iframe{border:0;width:100%;flex:1;min-height:0;background:#fff}.error{color:#b91c1c}@media(max-width:720px){.bar{gap:4px;padding:8px}.info{max-width:150px}.panel{right:8px;bottom:160px;width:calc(100vw - 16px);height:calc(100vh - 180px)}}
+    *{box-sizing:border-box}button{font:inherit;color:inherit;cursor:pointer;border:1px solid #e4e4e7;border-radius:8px;padding:7px 10px;min-height:36px;background:white;white-space:nowrap}button:hover{background:#f4f4f5}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:2px solid #71717a;outline-offset:2px}button.primary{background:#18181b;color:white;border-color:#18181b}button.danger{color:#b91c1c;border-color:#fecaca}.bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px;background:#fff;border:1px solid #e4e4e7;border-radius:12px;box-shadow:0 8px 28px #18181b29;max-width:100%;width:max-content}.handle{touch-action:none;cursor:grab;user-select:none;font-weight:600;border:0;background:#f4f4f5}.info{display:flex;flex-direction:column;min-width:120px;max-width:240px;margin-right:6px}.account{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.status{white-space:normal;overflow-wrap:anywhere}.account{font-weight:600}.status{font-size:12px;color:#71717a}.nav{display:flex;gap:4px;border-right:1px solid #e4e4e7;padding-right:6px}.panel{position:fixed;right:16px;bottom:100px;width:min(960px,calc(100vw - 32px));height:min(720px,calc(100vh - 140px));min-height:180px;display:flex;flex-direction:column;background:#fff;border:1px solid #d4d4d8;border-radius:12px;overflow:hidden;box-shadow:0 12px 44px #18181b40}.panel[hidden]{display:none}.panel-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e4e4e7;background:#fafafa}.panel-head strong{flex:1}.panel iframe{border:0;width:100%;flex:1;min-height:0;background:#fff}.progress{flex-basis:100%;display:flex;flex-direction:column;gap:6px;border-top:1px solid #e4e4e7;padding-top:8px;font-size:13px;white-space:normal;overflow:visible;overflow-wrap:anywhere}.progress[hidden]{display:none}.progress-row{display:flex;flex-wrap:wrap;gap:6px 14px;line-height:1.7}.progress-row strong{font-weight:600}.retry{color:#92400e}.error{color:#b91c1c}@media(max-width:720px){.bar{gap:4px;padding:8px}.info{max-width:150px}.panel{right:8px;bottom:160px;width:calc(100vw - 16px);height:calc(100vh - 180px)}}
   `;
   const bar = document.createElement('div'); bar.className = 'bar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', '大懒虫达人工具');
   const button = (label, action, className = '') => {
@@ -30,12 +30,15 @@
   const info = document.createElement('div'); info.className = 'info';
   const account = document.createElement('span'); account.className = 'account'; account.textContent = '当前账号';
   const status = document.createElement('span'); status.className = 'status'; status.textContent = '正在连接…'; status.setAttribute('aria-live', 'polite'); info.append(account, status);
-  const collect = button('采集达人', () => command('INVITE_TOOLBAR_COLLECT'), 'primary');
+  const collect = button('采集达人', () => command('INVITE_TOOLBAR_COLLECT'), 'primary'); collect.disabled = true;
+  const reconnect = button('重新检查登录', () => refresh()); reconnect.title = '在平台完成登录后重新检查，不会自动采集或发送';
   const invite = button('邀约达人 0', () => showPanel('talents'));
+  const returnToInvite = button('返回邀约', () => showPanel('talents')); returnToInvite.hidden = true;
   const logs = button('日志', () => showPanel('logs'));
   const records = button('记录', () => showPanel('records'));
   const stop = button('停止', () => command('INVITE_TOOLBAR_STOP'), 'danger'); stop.disabled = true;
-  bar.append(handle, nav, info, collect, invite, logs, records, stop);
+  const progress = document.createElement('div'); progress.className = 'progress'; progress.hidden = true;
+  bar.append(handle, nav, info, reconnect, returnToInvite, collect, invite, logs, records, stop, progress);
   const panel = document.createElement('section'); panel.className = 'panel'; panel.hidden = true; panel.setAttribute('aria-label', '达人工作区');
   const heading = document.createElement('div'); heading.className = 'panel-head';
   const title = document.createElement('strong'); title.textContent = '达人工作区';
@@ -51,10 +54,11 @@
   panelRoot.append(panelStyle, panel);
   let route = '', generation = 0, polling = false, busy = false, lastPoll = 0, position, drag;
   const extensionOrigin = chrome.runtime.getURL('/').replace(/\/$/, '');
-  function closePanel() { panel.hidden = true; frame.src = 'about:blank'; }
+  function closePanel() { panel.hidden = true; }
+  function resetPanel() { closePanel(); frame.src = 'about:blank'; }
   function showPanel(view) {
     if (!scope.active || !supported()) return;
-    const next = chrome.runtime.getURL('invite.html') + '?embedded=1&view=' + view;
+    const next = chrome.runtime.getURL('invite.html') + '?embedded=1#' + view;
     if (frame.src !== next) frame.src = next;
     title.textContent = {talents:'邀约达人', records:'邀约记录', logs:'任务日志'}[view];
     panel.hidden = false;
@@ -64,15 +68,48 @@
     closePanel();
   });
   const clean = value => String(value ?? '').slice(0, 180);
+  let readyUrl = '', latestState = null, lastLoggedIn = false, hasSeenLoggedOut = false;
+  function updateControls() {
+    const ready = latestState?.loggedIn === true && latestState?.readiness === true && readyUrl === location.href;
+    collect.disabled = busy || !ready || latestState?.collecting === true;
+    collect.title = !latestState?.loggedIn ? '请先在平台页面完成登录' : !ready ? '请先搜索或应用筛选，等待列表加载后采集' : '采集当前筛选结果';
+    reconnect.hidden = latestState?.loggedIn === true;
+    returnToInvite.hidden = !(hasSeenLoggedOut && latestState?.loggedIn === true);
+    stop.disabled = !(busy || latestState?.collecting || latestState?.inviting);
+  }
+  function renderProgress() {
+    const tasks = Array.isArray(latestState?.tasks) ? latestState.tasks.slice(0, 2) : [];
+    progress.replaceChildren();
+    progress.hidden = !tasks.length;
+    const number = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    for (const task of tasks) {
+      const row = document.createElement('div'); row.className = 'progress-row';
+      const name = document.createElement('strong'); name.textContent = task.kind === 'collect' ? '采集进度' : '邀约进度'; row.append(name);
+      for (const text of [`进度 ${number(task.processed)}/${number(task.total)}`, `成功 ${number(task.success)}`, `失败 ${number(task.failed)}`, `跳过 ${number(task.skipped)}`, `待核实 ${number(task.review)}`]) {
+        const metric = document.createElement('span'); metric.textContent = text; row.append(metric);
+      }
+      if (Number.isFinite(task.retryAt) && task.retryAt > 0) {
+        const retry = document.createElement('span'); retry.className = 'retry';
+        const seconds = Math.max(0, Math.ceil((task.retryAt - Date.now()) / 1000));
+        retry.textContent = seconds ? `重试倒计时 ${seconds} 秒` : '正在重新检查'; row.append(retry);
+      }
+      progress.append(row);
+    }
+  }
   function applyState(value) {
-    account.textContent = clean(value.accountName) || '当前账号';
+    latestState = value; readyUrl = location.href;
+    account.textContent = clean(value.accountName) || (value.loggedIn ? '当前账号' : '尚未登录平台');
     const count = Number.isSafeInteger(value.total) && value.total >= 0 ? value.total : 0;
     invite.textContent = `邀约达人 ${count}`;
-    collect.disabled = busy || value.collecting === true;
-    stop.disabled = !(busy || value.collecting || value.inviting);
     status.classList.remove('error');
-    status.textContent = clean(value.progress || value.status) || '就绪';
+    status.textContent = !value.loggedIn ? '请先在平台完成登录，工具会自动检查；不会自动开始任务'
+      : !value.readiness ? '已登录，请搜索或重新应用筛选后采集'
+      : !lastLoggedIn ? '登录已确认，可继续操作；任务不会自动开始' : clean(value.status) || '就绪';
+    if (value.loggedIn !== true) hasSeenLoggedOut = true;
+    lastLoggedIn = value.loggedIn === true;
+    updateControls(); renderProgress();
   }
+  scope.setInterval(() => { if (readyUrl === location.href) renderProgress(); }, 1000);
   async function request(type, extra = {}) {
     const result = await chrome.runtime.sendMessage({type, ...extra});
     if (!result?.ok) throw Error(result?.error || '工具暂不可用');
@@ -82,16 +119,17 @@
     if (polling || !scope.active || !supported()) return;
     const current = generation; polling = true; lastPoll = Date.now();
     try { const value = await request('INVITE_TOOLBAR_STATUS'); if (scope.active && current === generation) applyState(value); }
-    catch (error) { if (scope.active && current === generation) { status.textContent = clean(error.message); status.classList.add('error'); } }
+    catch (error) { if (scope.active && current === generation) { latestState = null; readyUrl = ''; updateControls(); renderProgress(); status.textContent = clean(error.message); status.classList.add('error'); } }
     finally { polling = false; }
   }
   async function command(type, extra = {}) {
+    if (type === 'INVITE_TOOLBAR_COLLECT' && !(latestState?.loggedIn === true && latestState?.readiness === true && readyUrl === location.href)) { updateControls(); return; }
     const ownsBusy = type !== 'INVITE_TOOLBAR_STOP';
     if (busy && ownsBusy || !scope.active || !supported()) return;
     const current = generation; if (ownsBusy) { busy = true; collect.disabled = true; if (type === 'INVITE_TOOLBAR_COLLECT') stop.disabled = false; }
     try { await request(type, extra); }
     catch (error) { if (scope.active && current === generation) { status.textContent = clean(error.message); status.classList.add('error'); } }
-    finally { if (scope.active && current === generation) { if (ownsBusy) { busy = false; collect.disabled = false; } void refresh(); } }
+    finally { if (scope.active && current === generation) { if (ownsBusy) busy = false; updateControls(); void refresh(); } }
   }
   function clamp(left, top) {
     const rect = host.getBoundingClientRect();
@@ -109,13 +147,13 @@
   scope.listen(window, 'resize', () => { if (position) clamp(position.left, position.top); });
   function syncRoute() {
     if (route !== location.href) {
-      route = location.href; generation++; closePanel(); busy = false; lastPoll = 0;
+      route = location.href; generation++; resetPanel(); busy = false; lastPoll = 0;
       if (supported()) { document.documentElement.append(host, panelHost); status.textContent = '正在连接…'; }
       else { host.remove(); panelHost.remove(); }
     }
     if (supported() && Date.now() - lastPoll >= 2000) void refresh();
   }
-  scope.cleanup(() => { generation++; closePanel(); host.remove(); panelHost.remove(); });
+  scope.cleanup(() => { generation++; resetPanel(); host.remove(); panelHost.remove(); });
   scope.listen(window, 'popstate', syncRoute); scope.listen(window, 'hashchange', syncRoute);
   scope.setInterval(syncRoute, 500); syncRoute();
 })();

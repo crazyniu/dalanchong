@@ -41,3 +41,5 @@ body:has(.batch-actions:not([hidden])) .toast { bottom: 72px; }
 .empty { min-height: 150px; gap: 12px; }
 .empty > wa-icon { font-size: 32px; }
 .empty > span { font-size: 14px; }
+
+.workspace-actions #open-workspace { grid-column: 1 / -1; }

@@ -162,6 +162,7 @@ export async function openInviteStore() {
         const finish = talents => {
           for (const row of (records ? rows : talents)) {
             if (!(records ? matchesRecord(row, filters) : matchesTalent(row, filters, invitations.get(row.id)))) continue;
+            if (!records && options.excludeInvited === true && invitations.has(row.id)) continue;
             const item = publicRow(row);
             if (!records) item.invitationStatus = invitations.get(row.id)?.status || '';
             result.push(item);
@@ -258,7 +259,7 @@ export async function openInviteStore() {
       });
     },
     listTalents: (scope, page) => query(scope, page),
-    listTalentIds: async (scope, filters) => (await query(scope, {filters}, false, true)).map(row => row.id),
+    listTalentIds: async (scope, filters, excludeInvited = false) => (await query(scope, {filters, excludeInvited}, false, true)).map(row => row.id),
     exportRows: (scope, filters, records = false) => query(scope, {filters}, records, true),
     listTasks: (scope, page) => list('tasks', scope, page),
     listInvitations: (scope, page) => query(scope, page, true),

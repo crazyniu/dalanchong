@@ -10,8 +10,6 @@ export function invitationSurface(sender, runtime) {
     if (!source || !Number.isInteger(sender.tab?.id) || !(sender.frameId > 0)) return null;
     return {kind:'embedded', source, tabId:sender.tab.id, owner:`${sender.tab.id}:${sender.documentId}`};
   }
-  if (isPanel && (!sender.tab?.url || new URL(sender.tab.url).protocol === own.protocol && new URL(sender.tab.url).host === own.host))
-    return {kind:'page', owner:`${sender.tab?.id ?? 'popup'}:${sender.documentId}`};
   if (source && sender.frameId === 0 && sender.url === sender.tab.url)
     return {kind:'toolbar', source, tabId:sender.tab.id, owner:`${sender.tab.id}:${sender.documentId}`};
   return null;

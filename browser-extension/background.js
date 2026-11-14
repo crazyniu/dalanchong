@@ -7,12 +7,11 @@
  * Invariants: original probes serialize per tab; unavailable CDN chains trigger at most three fresh platform resolutions without changing quality or inventing hosts. webRequest observes every redirect; only a verified final URL is saved. Batch requests never navigate source tabs.
  * Side effects: tab/script operations, platform HTTP requests, session storage, and download requeueing.
  */
-import './settings-background.js';
 import './commerce-background.js';
-import './shop-label-background.js';
 import './capture-background.js';
 import './preview-background.js';
 import './invite-background.js';
+import './invite-return-background.js';
 import {initializeContextMenus} from './context-menu-background.js';
 void initializeContextMenus().catch(error => console.error('快捷菜单初始化失败', error.message));
 import {initializeFeatureInjection} from './injection-gate-background.js';

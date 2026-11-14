@@ -6,13 +6,16 @@
  */
 import {initializeLicense, licenseEpoch, requireLicense, onLicenseChange} from './license-background.js';
 
+import {openInvitationSource} from './invite-entry.js';
+
 const destinations = new Map([
   ['dalanchong-video', {title: '视频工作区', page: 'manager.html?view=captured'}],
-  ['dalanchong-invite', {title: '达人邀约', page: 'invite.html'}],
+  ['dalanchong-invite-douyin', {title: '抖音达人邀约', platform:'douyin'}],
+  ['dalanchong-invite-kuaishou', {title: '快手达人邀约', platform:'kuaishou'}],
   ['dalanchong-settings', {title: '设置', page: 'settings.html'}],
 ]);
 const activationId = 'dalanchong-activate';
-export function createContextMenuController({menus, tabs, runtime, license}) {
+export function createContextMenuController({menus, tabs, windows, runtime, license}) {
   let revision = 0, queue = Promise.resolve(), initialized;
   const callbackCall = (method, ...args) => new Promise((resolve, reject) => {
     method(...args, () => {
@@ -36,7 +39,7 @@ export function createContextMenuController({menus, tabs, runtime, license}) {
     });
     return queue;
   }
-  async function click(info) {
+  async function click(info, sourceTab) {
     const id = String(info.menuItemId);
     if (id !== activationId && !destinations.has(id)) return;
     let page = 'popup.html';
@@ -45,8 +48,12 @@ export function createContextMenuController({menus, tabs, runtime, license}) {
       try {
         await license.initialize();
         license.require(epoch);
-        page = destinations.get(id).page;
+        page = destinations.get(id).page || 'platform';
       } catch { /* A stale menu leads to activation, never into an authorized action. */ }
+    }
+    if (page === 'platform') {
+      await openInvitationSource({tabs, windows, verify:async () => { license.require(epoch); }}, destinations.get(id).platform, sourceTab);
+      return;
     }
     const tab = await tabs.create({url: runtime.getURL(page)});
     if (page !== 'popup.html') {
@@ -58,7 +65,7 @@ export function createContextMenuController({menus, tabs, runtime, license}) {
   }
   function initialize() {
     if (!initialized) {
-      menus.onClicked.addListener(info => { void click(info).catch(() => {}); });
+      menus.onClicked.addListener((info, tab) => { void click(info, tab).catch(() => {}); });
       license.subscribe(state => rebuild(state.valid));
       initialized = rebuild(false).then(async () => {
         try { await license.initialize(); return rebuild(true); }
@@ -71,7 +78,7 @@ export function createContextMenuController({menus, tabs, runtime, license}) {
 }
 let controller;
 export function initializeContextMenus() {
-  controller ||= createContextMenuController({menus: chrome.contextMenus, tabs: chrome.tabs, runtime: chrome.runtime,
+  controller ||= createContextMenuController({menus: chrome.contextMenus, tabs: chrome.tabs, windows:chrome.windows, runtime: chrome.runtime,
     license: {initialize: initializeLicense, epoch: licenseEpoch, require: requireLicense, subscribe: onLicenseChange}});
   return controller.initialize();
 }

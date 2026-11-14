@@ -15,7 +15,7 @@ function fixture(initial = false) {
     menus: {removeAll(callback) { entries.clear(); callback(); },
       create(item, callback) { entries.set(item.id, item); callback(); },
       onClicked: {addListener(handler) { clickHandler = handler; }}},
-    tabs: {async create(item) { opened.push(item.url); return {id: 8}; }, async update(id, item) { updated.push({id, ...item}); }},
+    tabs: {async query() { return []; }, async create(item) { opened.push(item.url); return {id: 8}; }, async update(id, item) { updated.push({id, ...item}); }},
     license: {async initialize() {}, epoch: () => epoch,
       require(expected) { if (!active || expected !== undefined && expected !== epoch) throw Error('inactive'); },
       subscribe(handler) { subscriber = handler; }},
@@ -28,14 +28,14 @@ function fixture(initial = false) {
 test('unactivated profile has only activation and rejects stale business shortcut', async () => {
   const f = fixture(); await f.controller.initialize();
   assert.deepEqual([...f.entries.keys()], ['dalanchong-activate']);
-  await f.controller.click({menuItemId: 'dalanchong-invite'});
+  await f.controller.click({menuItemId: 'dalanchong-invite-douyin'});
   assert.deepEqual(f.opened, [root + 'popup.html']);
 });
 test('activation restores three shortcuts without initiating business actions', async () => {
   const f = fixture(); await f.controller.initialize(); await f.change(true);
-  assert.deepEqual([...f.entries.keys()], ['dalanchong-video', 'dalanchong-invite', 'dalanchong-settings']);
+  assert.deepEqual([...f.entries.keys()], ['dalanchong-video', 'dalanchong-invite-douyin', 'dalanchong-invite-kuaishou', 'dalanchong-settings']);
   for (const menuItemId of f.entries.keys()) await f.controller.click({menuItemId});
-  assert.deepEqual(f.opened, [root + 'manager.html?view=captured', root + 'invite.html', root + 'settings.html']);
+  assert.deepEqual(f.opened, [root + 'manager.html?view=captured', 'https://buyin.jinritemai.com/dashboard/servicehall/daren-square', 'https://cps.kwaixiaodian.com/zone/daren-match/peer-reference', root + 'settings.html']);
   await f.change(false); assert.deepEqual([...f.entries.keys()], ['dalanchong-activate']);
 });
 test('revocation and reactivation during click verification cannot reuse stale epoch', async () => {

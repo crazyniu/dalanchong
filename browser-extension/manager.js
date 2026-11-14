@@ -20,8 +20,10 @@ import {videoPage} from './platforms.js';
 import {extractVideoURLs} from './resolve.js';
 import {$, activeStates, copyText, downloadState, element, groupedItems, icon, iconButton, indexDownloadJobs, loadResolutions, probeResolutions, qualitySelect, qualityText, queue, readLibrary, send, showLibraryError, sizeText, thumb, toast} from './ui.js';
 import {requirePageLicense} from './license-ui.js';
+import {bindWorkspaceNavigation} from './workspace-nav.js';
 
 await requirePageLicense();
+bindWorkspaceNavigation(document, {tabs:chrome.tabs, windows:chrome.windows, runtime:chrome.runtime, onError: message => toast(message, true)});
 
 const selected = new Set();
 const chosenFormats = new Map();

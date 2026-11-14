@@ -66,7 +66,7 @@ test('only inert bootstrap is static; all business scripts require per-document 
   assert.equal(manifest.content_scripts[0].match_about_blank, true);
   assert.equal(manifest.minimum_chrome_version, '116');
   assert.ok(manifest.permissions.includes('alarms'));
-  assert.equal(featureScripts.length, 8);
+  assert.equal(featureScripts.length, 7);
   for (const script of featureScripts) {
     assert.equal(script.js[0], 'feature-gate.js');
     for (const file of script.js.slice(1)) {

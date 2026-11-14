@@ -65,3 +65,14 @@ test('revocation and immediate reactivation still discard old status records',as
  const result=f.api.state(surface);f.setValid(false);f.setValid(true);pending.resolve();
  assert.equal((await result).tasks.length,0);
 });
+
+test('toolbar reports explicit account/list readiness and structured counters',async()=>{
+ const f=setup();f.api.sessions.set('s',makeSession('shop'));
+ f.tasks.push({id:'task',platform:'douyin',platformAccountId:'shop',kind:'invite',status:'running',processed:24,total:150,success:12,failed:3,skipped:8,review:1,retryAt:Date.now()+5000});
+ const result=await f.api.toolbar({type:'INVITE_TOOLBAR_STATUS'},{...surface,kind:'toolbar'});
+ assert.equal(result.loggedIn,true);assert.equal(result.readiness,true);
+ assert.equal(result.tasks[0].processed,24);assert.equal(result.tasks[0].review,1);
+ f.context.readObservation=async()=>({account:{status:'online',shopId:'shop'},capture:null});
+ const notReady=await f.api.toolbar({type:'INVITE_TOOLBAR_STATUS'},{...surface,kind:'toolbar'});
+ assert.equal(notReady.loggedIn,true);assert.equal(notReady.readiness,false);
+});

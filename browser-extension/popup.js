@@ -11,6 +11,7 @@
 import './vendor/ui/components.js';
 import {$, copyText, downloadState, element, groupedItems, iconButton, indexDownloadJobs, loadResolutions, qualitySelect, qualityText, queue, readLibrary, send, showLibraryError, sizeText, toast} from './ui.js';
 import {requirePageLicense} from './license-ui.js';
+import {verifyWorkspaceLicense} from './workspace-nav.js';
 
 await requirePageLicense();
 
@@ -126,26 +127,17 @@ $('clear').addEventListener('click', async () => {
     renderSelection();
   }
 });
-$('open-invite').addEventListener('click', async () => {
+$('open-more').addEventListener('click', async event => {
+  const button = event.currentTarget; button.disabled = true;
   try {
-    await chrome.tabs.create({url: chrome.runtime.getURL('invite.html')});
+    await verifyWorkspaceLicense(chrome.runtime);
+    const url = new URL(chrome.runtime.getURL('manager.html'));
+    url.searchParams.set('view', 'captured');
+    if (selected.size) url.searchParams.set('ids', visible.filter(item => selected.has(item.groupKey)).map(item => item.id).join(','));
+    await chrome.tabs.create({url: url.href});
     window.close();
   } catch (error) { toast(error.message, true); }
-});
-
-$('open-settings').addEventListener('click', async () => {
-  try {
-    await chrome.tabs.create({url: chrome.runtime.getURL('settings.html')});
-    window.close();
-  } catch (error) { toast(error.message, true); }
-});
-
-$('open-workspace').addEventListener('click', async () => {
-  const url = new URL(chrome.runtime.getURL('manager.html'));
-  url.searchParams.set('view', 'captured');
-  if (selected.size) url.searchParams.set('ids', visible.filter(item => selected.has(item.groupKey)).map(item => item.id).join(','));
-  await chrome.tabs.create({url: url.href});
-  window.close();
+  finally { button.disabled = false; }
 });
 
 async function refresh() {
