@@ -1,9 +1,15 @@
 /** Worker-side pagination keeps account-wide data out of page refresh messages. */
 import {normalizedFilters, matchesTalent} from './invite-filter.js';
+function visibleMetric(value) {
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'string') return false;
+  const text = value.trim();
+  return text !== '' && !/^(?:[¥￥]\s*)?(?:[-—–]+|NaN)$/i.test(text);
+}
 export async function queryInvitationData(store, scope, input) {
   if (!input || !['talents','records','record'].includes(input.kind)) throw Error('查询类型无效');
   if (input.kind === 'record') {
-    if (typeof input.id !== 'string' || input.id.length > 300) throw Error('记录 ID 无效');
+    if (typeof input.id !== 'string' || !input.id || input.id.length > 300) throw Error('记录 ID 无效');
     const records = await store.exportRows(scope, {}, true);
     return {record: records.find(row => row.id === input.id) || null};
   }
@@ -31,5 +37,6 @@ export async function queryInvitationData(store, scope, input) {
   return {...result, accountTotal: all.length,
     latestRecords: rows.map(row => invitationById.get(row.id)).filter(Boolean),
     sources: [...new Set(all.map(row => row.source).filter(Boolean))].sort(),
-    columns: [...new Set(all.flatMap(row => Object.keys(row).filter(key => row[key] !== undefined && row[key] !== null && row[key] !== '')))]};
+    columns: (scope.platform === 'kuaishou' ? ['sales30d', 'sales7d'] : ['sales30d', 'settlement30d'])
+      .filter(key => all.some(row => visibleMetric(row[key])))};
 }

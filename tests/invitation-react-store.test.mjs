@@ -23,3 +23,7 @@ test('unchanged polling does not invalidate large lists and completed task rende
  await store.refreshInvitationWorkspace();const revision=store.useCommerce.getState().dataRevision;
  await store.refreshInvitationWorkspace();assert.equal(store.useCommerce.getState().dataRevision,revision);assert.equal(store.useCommerce.getState().tasks['a:collect'].status,'done');
 });
+test('collection completed count uses processed when runtime never writes success',()=>{
+ store.clearInvitationWorkspace();store.updateInvitationWorkspace({...input('a'),tasks:[{id:'collect',kind:'collect',status:'completed',processed:57,success:0,total:57}]});
+ const task=store.useCommerce.getState().tasks['a:collect'];assert.equal(task.collected,57);assert.equal(task.status,'done');assert.equal(task.success,0);
+});

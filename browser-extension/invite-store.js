@@ -169,7 +169,7 @@ export async function openInviteStore() {
             result.push(item);
           }
           result.sort((a, b) => Date.parse(b.updatedAt || b.collectedAt || b.createdAt) - Date.parse(a.updatedAt || a.collectedAt || a.createdAt));
-          done(all ? result.slice(0, 10000) : result.slice(offset, offset + limit));
+          done(all ? (records ? result : result.slice(0, 10000)) : result.slice(offset, offset + limit));
         };
         if (records) finish([]);
         else on(tx.objectStore('talents').index('scope').getAll(IDBKeyRange.only(key)), finish);
@@ -270,7 +270,18 @@ export async function openInviteStore() {
     },
     listTalentIds: async (scope, filters, excludeInvited = false) => (await query(scope, {filters, excludeInvited}, false, true)).map(row => row.id),
     exportRows: (scope, filters, records = false) => query(scope, {filters}, records, true),
-    listTasks: (scope, page) => list('tasks', scope, page),
+    listTasks(scope, {offset = 0, limit = 100} = {}) {
+      const key = scopeKey(scope);
+      count(offset, '偏移量'); count(limit, '每页数量');
+      if (!limit || limit > 1000) throw new Error('每页数量应为 1–1000');
+      return transaction(db, ['tasks'], 'readonly', (tx, done, on) => {
+        on(tx.objectStore('tasks').index('scope').getAll(IDBKeyRange.only(key)), rows => {
+          const time = row => Date.parse(row.updatedAt || row.createdAt) || 0;
+          rows.sort((a, b) => time(b) - time(a) || String(a.id).localeCompare(String(b.id)));
+          done(rows.slice(offset, offset + limit).map(publicRow));
+        });
+      });
+    },
     listInvitations: (scope, page) => query(scope, page, true),
     getTalent(scope, id) {
       const key = scopeKey(scope); identifier(id, '达人 ID');

@@ -14,7 +14,9 @@ export function normalizedFilters(input = {}, records = false) {
   } else {
     result.invitationStatus = input.invitationStatus || 'all'; result.gender = input.gender || 'all';
     if (!['all', 'invited', 'uninvited', 'pending', 'success', 'failed', 'review', 'skipped', 'sending'].includes(result.invitationStatus) || !['all', 'male', 'female', 'unknown'].includes(result.gender)) throw new Error('达人筛选无效');
-    result.source = String(input.source || '').trim().slice(0, 200);
+    // Source options come directly from stored labels: preserve their exact value.
+    result.source = String(input.source || '');
+    if (result.source.length > 500) throw new Error('采集来源无效');
     for (const key of ['minFans', 'maxFans']) if (input[key] !== undefined && input[key] !== '') {
       if (!Number.isFinite(Number(input[key])) || Number(input[key]) < 0) throw new Error('粉丝范围无效');
       result[key] = Number(input[key]);

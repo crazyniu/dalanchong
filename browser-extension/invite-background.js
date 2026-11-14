@@ -9,6 +9,7 @@
  * Boundary: no page-message bridge, arbitrary URLs/scripts, cloud data sync, or
  * automatic activation. Invalid authorization stops work; Stop is always available.
  */
+import {createWorkspaceConnections} from './workspace-connection.js';
 import {queryInvitationData} from './invite-query.js';
 import {invitationSurface, selectedExport} from './invite-surface.js';
 import {listenMessages} from './messages.js';
@@ -22,7 +23,13 @@ import {createInviteRuntime} from './invite-runtime.js';
 const sessions = new Map();
 const preparing = new Map();
 let initialized, store, runtime;
-onLicenseChange(state => { if (!state.valid) { runtime?.stopAll(); sessions.clear(); } });
+const workspaceConnections = createWorkspaceConnections({runtime:chrome.runtime,initialize:initializeLicense,verify:requireLicense,onExpire(owner) {
+  for (const [id,session] of sessions) if (session.owners.delete(owner)) {
+    if (session.scope) runtime?.stop(session.scope);
+    if (!session.owners.size) sessions.delete(id);
+  }
+}});
+onLicenseChange(state => { if (!state.valid) { workspaceConnections.closeAll(); runtime?.stopAll(); sessions.clear(); } });
 async function initialize() {
   if (!initialized) initialized = (async () => {
     store = await openInviteStore();
@@ -74,8 +81,9 @@ function requireScope(session) {
   inviteLicense.requireValid(session.scope);
   return session.scope;
 }
-async function handle(message, surface, cancelled = () => false) {
-  await initialize();
+async function handle(message, surface, cancelled = () => false, assertDocument = workspaceConnections.capture(surface)) {
+  assertDocument();
+  await initialize(); assertDocument();
   if (message.type === 'INVITE_HOST_CONTEXT') return {tabId:surface.tabId, platform:surface.source.platform, sourceName:surface.source.name,sourceOrigin:surface.source.origin};
   if (message.type === 'INVITE_STATUS') return state(surface);
   if (message.type === 'INVITE_ACTIVATE') {
@@ -95,11 +103,11 @@ async function handle(message, surface, cancelled = () => false) {
     if (!Number.isInteger(tabId) || !['douyin','kuaishou'].includes(platform)) throw new Error('来源选择无效');
     let pending = preparing.get(tabId);
     if (!pending) {
-      pending = handle({...message,type:'_PREPARE',tabId,platform},surface);
+      pending = handle({...message,type:'_PREPARE',tabId,platform},surface,cancelled,assertDocument);
       preparing.set(tabId,pending);
     }
     try {
-      const result = await pending; requireLicense(epoch);
+      const result = await pending; requireLicense(epoch); assertDocument();
       sessionFor(result.sessionId).owners.add(surface.owner);
       return result;
     } finally { if (preparing.get(tabId) === pending) preparing.delete(tabId); }
@@ -115,11 +123,12 @@ async function handle(message, surface, cancelled = () => false) {
       try {
         const observation = await observe(existing);
         requireLicense(epoch);
-        existing.owners.add(surface.owner);
+        assertDocument(); existing.owners.add(surface.owner);
         return {sessionId, observation};
       } catch { if (existing.scope) runtime.stop(existing.scope); sessions.delete(sessionId); }
     }
-    const page = await prepareObservation(message.tabId, message.platform);
+    assertDocument();
+    const page = await prepareObservation(message.tabId, message.platform); assertDocument();
     for (const [id, prior] of sessions) if (prior.page.tabId === message.tabId) {
       if (prior.scope) runtime.stop(prior.scope);
       sessions.delete(id);
@@ -136,7 +145,7 @@ async function handle(message, surface, cancelled = () => false) {
     }
     requireLicense(epoch);
     const sessionId = crypto.randomUUID();
-    sessions.set(sessionId, session);
+    assertDocument(); sessions.set(sessionId, session);
     return {sessionId, observation};
   }
   if (message.type === 'INVITE_STOP') {
@@ -172,8 +181,8 @@ async function handle(message, surface, cancelled = () => false) {
     }
     return {rows: await store.listInvitations(scope, page)};
   }
-  const observation = await observe(session);
-  if (message.type === 'INVITE_COLLECT') return {task: await runtime.startCollection(scope, session.connection, observation.capture, cancelled)};
+  const observation = await observe(session); assertDocument();
+  if (message.type === 'INVITE_COLLECT') return {task: await runtime.startCollection(scope, session.connection, observation.capture, () => { try { assertDocument(); return cancelled(); } catch { return true; } })};
   if (message.type === 'INVITE_SEND') return {task: await runtime.startInvitation(scope, session.connection, message.config, message.ids)};
   throw new Error('不支持的邀约操作');
 }
@@ -190,27 +199,31 @@ listenMessages(types, (message, sender, respond) => {
 const toolbarTypes = new Set(['INVITE_TOOLBAR_STATUS','INVITE_TOOLBAR_COLLECT','INVITE_TOOLBAR_STOP','INVITE_TOOLBAR_NAV']);
 listenMessages(toolbarTypes, (message, sender, respond) => {
   const surface = invitationSurface(sender, chrome.runtime);
-  if (!['toolbar','embedded'].includes(surface?.kind)) { respond({ok:false,error:'来源页面不匹配'}); return; }
+  if (surface?.kind !== 'embedded') { respond({ok:false,error:'来源页面不匹配'}); return; }
   void toolbar(message, surface).then(payload => respond({ok:true,...payload}), error => respond({ok:false,error:error.message}));
 });
 const preparations = new Map();
 const preparationFailures = new Map();
 const toolbarGenerations = new Map();
 async function toolbar(message, surface) {
-  await initialize(); const epoch = licenseEpoch(); requireLicense(epoch);
+  const assertDocument = workspaceConnections.capture(surface);
+  const initialGeneration = toolbarGenerations.get(surface.tabId) || 0;
+  const assertCurrent = () => { assertDocument(); if (initialGeneration !== (toolbarGenerations.get(surface.tabId) || 0)) throw Error('来源页面或任务状态已改变，操作已停止'); };
+  assertCurrent(); await initialize(); assertCurrent(); const epoch = licenseEpoch(); requireLicense(epoch);
   if (message.type === 'INVITE_TOOLBAR_STOP') toolbarGenerations.set(surface.tabId,(toolbarGenerations.get(surface.tabId) || 0)+1);
   const generation = toolbarGenerations.get(surface.tabId) || 0;
+  const check = () => { assertDocument(); if (generation !== (toolbarGenerations.get(surface.tabId) || 0)) throw Error('来源页面或任务状态已改变，操作已停止'); };
   let toolbarObservation = null;
   let entry = [...sessions].find(([, item]) => item.page.tabId === surface.tabId && item.page.platform === surface.source.platform);
   if (entry) {
-    try { toolbarObservation = await observe(entry[1]); entry[1].owners.add(surface.owner); }
+    try { toolbarObservation = await observe(entry[1]); check(); entry[1].owners.add(surface.owner); }
     catch { if (entry[1].scope) runtime.stop(entry[1].scope); sessions.delete(entry[0]); entry = null; }
   }
   if (message.type === 'INVITE_TOOLBAR_STATUS' && !entry) {
     const last = preparationFailures.get(surface.tabId);
     if (!last || last.url !== surface.source.origin + surface.source.path || Date.now() - last.at > 30000) {
       try {
-        const prepared = await handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface);
+        check(); const prepared = await handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface,()=>false,check);
         entry = [prepared.sessionId,sessionFor(prepared.sessionId)]; toolbarObservation = prepared.observation; preparationFailures.delete(surface.tabId);
       } catch (error) {
         preparationFailures.set(surface.tabId,{url:surface.source.origin + surface.source.path,at:Date.now(),message:error.message});
@@ -219,7 +232,7 @@ async function toolbar(message, surface) {
   }
   if (message.type === 'INVITE_TOOLBAR_COLLECT' && !entry) {
     if (preparations.has(surface.tabId)) throw new Error('正在准备当前页面，请稍候');
-    const prepare = handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface);
+    check(); const prepare = handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface,()=>false,check);
     preparations.set(surface.tabId,prepare);
     try { const prepared = await prepare; entry = [prepared.sessionId, sessionFor(prepared.sessionId)]; toolbarObservation = prepared.observation; }
     finally { preparations.delete(surface.tabId); }
@@ -229,16 +242,18 @@ async function toolbar(message, surface) {
   const active = tasks.filter(t => t.status === 'running');
   requireLicense(epoch);
   if (message.type === 'INVITE_TOOLBAR_NAV') {
+    check();
     if (active.length) throw new Error('请先停止当前任务');
     if (message.action === 'back') await chrome.tabs.goBack(surface.tabId);
     else if (message.action === 'forward') await chrome.tabs.goForward(surface.tabId);
     else if (message.action === 'home') await chrome.tabs.update(surface.tabId,{url:surface.source.origin + surface.source.path});
     else throw new Error('导航操作无效');
   }
+  check();
   if (message.type === 'INVITE_TOOLBAR_STOP' && session?.scope) runtime.stop(session.scope);
   if (message.type === 'INVITE_TOOLBAR_COLLECT') {
-    if (generation !== (toolbarGenerations.get(surface.tabId) || 0)) throw new Error('采集已停止');
-    await handle({type:'INVITE_COLLECT',sessionId:entry[0]},surface,() => generation !== (toolbarGenerations.get(surface.tabId) || 0));
+    check();
+    await handle({type:'INVITE_COLLECT',sessionId:entry[0]},surface,() => generation !== (toolbarGenerations.get(surface.tabId) || 0),check);
   }
   const total = session?.scope ? (await store.listTalentIds(session.scope, {})).length : 0;
   requireLicense(epoch);

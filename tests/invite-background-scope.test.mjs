@@ -12,7 +12,8 @@ function setup() {
   const runtime={status:()=>tasks,stop:scope=>stops.push(scope),stopAll(){},recoverScope:async()=>{}};
   const store={listTasks:async scope=>stored.filter(t=>t.platformAccountId===scope.platformAccountId),listTalentIds:async()=>[]};
   const context=vm.createContext({Map,Set,Date,URL,crypto,setTimeout,
-    onLicenseChange(){},listenMessages(){},licenseEpoch:()=>epoch,
+    onLicenseChange(){},listenMessages(){},licenseEpoch:()=>epoch,initializeLicense:async()=>{},
+    createWorkspaceConnections:()=>({capture:()=>()=>{},closeAll(){}}),
     requireLicense(expected){if(!valid || expected!==undefined && expected!==epoch) throw Error('inactive');},
     inviteLicense:{status:()=>({valid}),requireValid(){if(!valid)throw Error('inactive');}},
     readObservation:async()=>({account:{status:'online',shopId:'shop'},capture:{list:{}}}),

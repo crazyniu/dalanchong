@@ -37,3 +37,22 @@ test('IndexedDB 10000-row dataset filters, paginates and isolates scope',async t
   t.diagnostic(`fake IndexedDB 10000 total rows: seed ${seedMs.toFixed(2)} ms; filtered query ${queryMs.toFixed(2)} ms; 20-row response ${bytes} bytes`);
  }finally {db.close()}
 });
+
+test('metric columns match platform and omit placeholder-only values while retaining zero',async()=>{
+ const values=[{id:'1',sales30d:' — ',settlement30d:'¥ NaN',sales7d:'20'},{id:'2',sales30d:' ',settlement30d:'-'}];
+ const local={exportRows:async(_scope,_filters,records)=>records?[]:values};
+ assert.deepEqual((await queryInvitationData(local,scope,{kind:'talents'})).columns,[]);
+ assert.deepEqual((await queryInvitationData(local,{...scope,platform:'kuaishou'},{kind:'talents'})).columns,['sales7d']);
+ values.push({id:'3',sales30d:'0',settlement30d:0});
+ assert.deepEqual((await queryInvitationData(local,scope,{kind:'talents'})).columns,['sales30d','settlement30d']);
+});
+
+test('source selection remains exact for stored long and space-containing labels',async()=>{
+ const source=' 来源 '+ '长'.repeat(230)+' ';
+ const rows=[{id:'1',name:'One',source},{id:'2',name:'Two',source:source.trim()}];
+ const local={exportRows:async(_scope,_filters,records)=>records?[]:rows};
+ const data=await queryInvitationData(local,scope,{kind:'talents',filters:{source}});
+ assert.deepEqual(data.rows.map(row=>row.id),['1']);
+ await assert.rejects(queryInvitationData(local,scope,{kind:'talents',filters:{source:'x'.repeat(501)}}),/采集来源/);
+ await assert.rejects(queryInvitationData(local,scope,{kind:'record',id:''}),/记录 ID/);
+});

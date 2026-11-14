@@ -14,43 +14,71 @@ export function sanitizedWorkspaceMemory(value:any):Memory|null {
    ? {products:c.products,message:c.message,phone:c.phone,wechat:c.wechat,interval:c.interval,maxInvites:c.maxInvites}:undefined
  return {selected:[...new Set<string>(value.selected)],inviteIds:[...new Set<string>(value.inviteIds)],composeOpen:value.composeOpen,config}
 }
+type Storage = {get:(key:string)=>Promise<Record<string,unknown>>;set:(data:Record<string,unknown>)=>Promise<void>}
+/** Executable controller keeps render-time readiness and asynchronous hydration scoped. */
+export function createWorkspaceMemoryController(storage:Storage,onChange:()=>void,onConfig:(accountId:string,config:InviteConfig)=>void) {
+ type Current={key:string;accountId:string;value:Memory;ready:boolean;active:boolean;error:string;dirty:Set<keyof Memory>}
+ let current:Current|null=null, serial=Promise.resolve()
+ const newest=new Map<string,Current>()
+ const notify=(item:Current)=>{if(item===current&&item.active)onChange()}
+ function persist(item:Current) {
+  if(!item.key||!item.ready||newest.get(item.key)!==item)return
+  const saved=structuredClone(item.value)
+  serial=serial.catch(()=>{}).then(()=>newest.get(item.key)===item?storage.set({[item.key]:saved}):undefined).catch(()=>{item.error='临时工作区保存失败';notify(item)})
+ }
+ return {
+  bind(scope:Scope|null) {
+   const nextKey=scope?workspaceMemoryKey(scope):''
+   if(nextKey&&current?.key===nextKey){current.active=true;notify(current);return}
+   if(current){current.active=false;if(current.ready&&current.dirty.size)persist(current)}
+   const item:Current={key:scope?workspaceMemoryKey(scope):'',accountId:scope?.accountId||'',value:empty(),ready:false,active:true,error:'',dirty:new Set()};current=item
+   if(item.key)newest.set(item.key,item)
+   notify(item)
+   if(!item.key)return
+   void storage.get(item.key).then(result=>{
+    const saved=sanitizedWorkspaceMemory(result[item.key])
+    if(saved)for(const field of ['selected','inviteIds','composeOpen','config'] as const) {
+     if(!item.dirty.has(field))Object.assign(item.value,{[field]:saved[field]})
+    }
+    item.ready=true
+    if(item===current&&item.active&&item.value.config)onConfig(item.accountId,item.value.config)
+    if(item.dirty.size)persist(item)
+    notify(item)
+   }).catch(()=>{item.error='临时工作区恢复失败';item.ready=true;if(item.dirty.size)persist(item);notify(item)})
+  },
+  view(key:string) {
+   return current?.active&&current.key===key&&key
+    ? {value:current.value,ready:current.ready,error:current.error}
+    : {value:empty(),ready:false,error:''}
+  },
+  edit<K extends keyof Memory>(key:string,field:K,next:Memory[K]) {
+   if(!key||!current?.active||current.key!==key||current.value[field]===next)return
+   current.value={...current.value,[field]:next};current.dirty.add(field);persist(current);notify(current)
+  },
+  dispose(){if(current){current.active=false;if(current.ready&&current.dirty.size)persist(current)}},
+  flushed:()=>serial,
+ }
+}
 export function useWorkspaceMemory(scope:Scope|null) {
  const key=scope?.principalId&&scope.accountId?workspaceMemoryKey(scope):''
- const [value,setValue]=useState<Memory>(empty),[ready,setReady]=useState(false),[error,setError]=useState('')
- const state=useRef({key:'',value:empty(),edited:0,ready:false,serial:Promise.resolve()})
- const persist=()=>{
-  const current=state.current;if(!current.key||!current.ready)return
-  const saved=structuredClone(current.value),savedKey=current.key
-  current.serial=current.serial.catch(()=>{}).then(()=>chrome.storage.session.set({[savedKey]:saved})).catch(()=>{if(state.current===current)setError('临时工作区保存失败')})
- }
+ const [,rerender]=useState(0)
+ const controller=useRef<ReturnType<typeof createWorkspaceMemoryController>|null>(null)
+ if(!controller.current)controller.current=createWorkspaceMemoryController(chrome.storage.session,()=>rerender(n=>n+1),(accountId,config)=>{
+  useCommerce.setState(state=>({configs:{...state.configs,[accountId]:config}}))
+ })
+ const memory=controller.current
  useEffect(()=>{
-  const current={key,value:empty(),edited:0,ready:false,serial:Promise.resolve()};state.current=current;setValue(empty());setReady(false);setError('')
-  if(!key||!scope)return
-  const accountId=scope.accountId
-  const initialEdits=current.edited
+  memory.bind(key?scope:null)
   const unsubscribe=useCommerce.subscribe((next,previous)=>{
-   if(state.current!==current||!next.configs[accountId]||next.configs[accountId]===previous.configs[accountId])return
-   current.edited++;current.value={...current.value,config:next.configs[accountId]};setValue(current.value);persist()
+   if(!scope)return
+   const config=next.configs[scope.accountId]
+   if(config&&config!==previous.configs[scope.accountId])memory.edit(key,'config',config)
   })
-  void chrome.storage.session.get(key).then(result=>{
-   if(state.current!==current)return
-   const saved=sanitizedWorkspaceMemory(result[key])
-   // Any user edit or freshly loaded config wins over an older asynchronous read.
-   if(saved&&current.edited===initialEdits){
-    current.value=saved
-    if(saved.config)useCommerce.setState(s=>({configs:{...s.configs,[accountId]:saved.config!}}))
-    setValue(current.value)
-   }
-   current.ready=true;setReady(true)
-  }).catch(()=>{if(state.current===current){current.ready=true;setReady(true);setError('临时工作区恢复失败')}})
-  return()=>{persist();unsubscribe();if(state.current===current)state.current={...current,key:'',ready:false}}
+  return()=>{unsubscribe();memory.dispose()}
  },[key])
- function update<K extends 'selected'|'inviteIds'|'composeOpen'>(field:K,next:Memory[K]){
-  if(state.current.key!==key||!key)return
-  const current=state.current;current.edited++;current.value={...current.value,[field]:next};setValue(current.value);persist()
- }
- // A persisted open sheet is a return hint only, never an automatic reopen/send.
- return {selected:state.current.key===key?value.selected:[],setSelected:(ids:string[])=>update('selected',ids),
-  inviteIds:state.current.key===key?value.inviteIds:[],setInviteIds:(ids:string[])=>update('inviteIds',ids),
-  composeWasOpen:state.current.key===key&&value.composeOpen,setComposeWasOpen:(open:boolean)=>update('composeOpen',open),ready,error}
+ const snapshot=memory.view(key)
+ // Persisted sheet state is a return hint, never an automatic reopen or send.
+ return {selected:snapshot.value.selected,setSelected:(ids:string[])=>memory.edit(key,'selected',ids),
+  inviteIds:snapshot.value.inviteIds,setInviteIds:(ids:string[])=>memory.edit(key,'inviteIds',ids),
+  composeWasOpen:snapshot.value.composeOpen,setComposeWasOpen:(open:boolean)=>memory.edit(key,'composeOpen',open),ready:snapshot.ready,error:snapshot.error}
 }
