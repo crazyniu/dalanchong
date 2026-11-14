@@ -9,6 +9,7 @@
  * Boundary: no page-message bridge, arbitrary URLs/scripts, cloud data sync, or
  * automatic activation. Invalid authorization stops work; Stop is always available.
  */
+import {queryInvitationData} from './invite-query.js';
 import {invitationSurface, selectedExport} from './invite-surface.js';
 import {listenMessages} from './messages.js';
 import {openInviteStore} from './invite-store.js';
@@ -75,7 +76,7 @@ function requireScope(session) {
 }
 async function handle(message, surface, cancelled = () => false) {
   await initialize();
-  if (message.type === 'INVITE_HOST_CONTEXT') return {tabId:surface.tabId, platform:surface.source.platform, sourceName:surface.source.name};
+  if (message.type === 'INVITE_HOST_CONTEXT') return {tabId:surface.tabId, platform:surface.source.platform, sourceName:surface.source.name,sourceOrigin:surface.source.origin};
   if (message.type === 'INVITE_STATUS') return state(surface);
   if (message.type === 'INVITE_ACTIVATE') {
     runtime.stopAll();
@@ -148,6 +149,11 @@ async function handle(message, surface, cancelled = () => false) {
   if (!session.owners.has(surface.owner) || surface.kind === 'embedded' && session.page.tabId !== surface.tabId) throw new Error('来源页面不匹配，请重新准备');
   if (message.type === 'INVITE_OBSERVE') return {observation: await observe(session)};
   const scope = requireScope(session);
+  if (message.type === 'INVITE_QUERY') return {data:await queryInvitationData(store,scope,message.query)};
+  if (message.type === 'INVITE_DELETE_LOGS') {
+    if (!Array.isArray(message.ids) || message.ids.length > 10000) throw new Error('日志选择无效');
+    return {deleted:await store.clearLogs(scope,message.ids)};
+  }
   if (message.type === 'INVITE_CLEAR_LOGS') return {deleted: await store.clearLogs(scope)};
   if (message.type === 'INVITE_LOGS') return {rows: await store.listLogs(scope, {offset: message.offset ?? 0, limit: message.limit ?? 1000})};
   if (message.type === 'INVITE_DELETE_RECORDS') return {deleted: await store.deleteRecords(scope, message.ids)};
@@ -172,7 +178,7 @@ async function handle(message, surface, cancelled = () => false) {
   throw new Error('不支持的邀约操作');
 }
 const types = new Set(['INVITE_STATUS', 'INVITE_ACTIVATE', 'INVITE_VERIFY', 'INVITE_PREPARE', 'INVITE_OBSERVE',
-  'INVITE_CLEAR_LOGS', 'INVITE_LOGS', 'INVITE_DELETE_RECORDS', 'INVITE_CONFIG_GET', 'INVITE_CONFIG_SAVE', 'INVITE_REVIEW', 'INVITE_TASKS', 'INVITE_TALENT_IDS', 'INVITE_EXPORT', 'INVITE_DELETE_TALENTS', 'INVITE_COLLECT', 'INVITE_SEND', 'INVITE_STOP', 'INVITE_TALENTS', 'INVITE_RECORDS']);
+  'INVITE_QUERY', 'INVITE_DELETE_LOGS', 'INVITE_CLEAR_LOGS', 'INVITE_LOGS', 'INVITE_DELETE_RECORDS', 'INVITE_CONFIG_GET', 'INVITE_CONFIG_SAVE', 'INVITE_REVIEW', 'INVITE_TASKS', 'INVITE_TALENT_IDS', 'INVITE_EXPORT', 'INVITE_DELETE_TALENTS', 'INVITE_COLLECT', 'INVITE_SEND', 'INVITE_STOP', 'INVITE_TALENTS', 'INVITE_RECORDS']);
 types.add('INVITE_HOST_CONTEXT');
 listenMessages(types, (message, sender, respond) => {
   const surface = invitationSurface(sender, chrome.runtime);
@@ -184,7 +190,7 @@ listenMessages(types, (message, sender, respond) => {
 const toolbarTypes = new Set(['INVITE_TOOLBAR_STATUS','INVITE_TOOLBAR_COLLECT','INVITE_TOOLBAR_STOP','INVITE_TOOLBAR_NAV']);
 listenMessages(toolbarTypes, (message, sender, respond) => {
   const surface = invitationSurface(sender, chrome.runtime);
-  if (surface?.kind !== 'toolbar') { respond({ok:false,error:'来源页面不匹配'}); return; }
+  if (!['toolbar','embedded'].includes(surface?.kind)) { respond({ok:false,error:'来源页面不匹配'}); return; }
   void toolbar(message, surface).then(payload => respond({ok:true,...payload}), error => respond({ok:false,error:error.message}));
 });
 const preparations = new Map();

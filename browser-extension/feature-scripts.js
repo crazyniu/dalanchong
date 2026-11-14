@@ -121,7 +121,7 @@ export const featureScripts = [
   },
   {
     matches: ["https://buyin.jinritemai.com/*", "https://cps.kwaixiaodian.com/*"],
-    js: ["feature-gate.js", "invite-toolbar.js", "invite-return.js"],
+    js: ["feature-gate.js", "invitation-host.js", "invite-return.js"],
     id: "licensed-invite-toolbar",
     runAt: "document_idle",
     allFrames: false

@@ -180,7 +180,8 @@ export async function openInviteStore() {
   return {
     close: () => db.close(),
     listLogs(scope, page) { return list('logs', scope, page); },
-    clearLogs(scope) {
+    clearLogs(scope, ids) {
+      const selected = ids === undefined ? null : new Set(ids.map(id => identifier(id, '日志 ID')));
       const key = scopeKey(scope);
       return transaction(db, ['tasks', 'logs'], 'readwrite', (tx, done, on) => {
         on(tx.objectStore('tasks').index('scope').getAll(IDBKeyRange.only(key)), tasks => {
@@ -188,7 +189,7 @@ export async function openInviteStore() {
           let removed = 0;
           on(tx.objectStore('logs').index('scope').openCursor(IDBKeyRange.only(key)), cursor => {
             if (!cursor) { done(removed); return; }
-            cursor.delete(); removed++; cursor.continue();
+            if (!selected || selected.has(cursor.value.id)) { cursor.delete(); removed++; } cursor.continue();
           });
         });
       });

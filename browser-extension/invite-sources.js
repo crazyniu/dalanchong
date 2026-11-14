@@ -1,7 +1,7 @@
 /**
  * AI module map
  * Purpose: identify the seven supported creator source routes in browser tabs.
- * Entry: invite.js calls invitationSource; source matching delegates to the shared invitation core.
+ * Entry: Invitation backend calls invitationSource; source matching delegates to the shared invitation core.
  * Flow: compare exact HTTPS origin and pathname; query filters do not alter support.
  * Boundary: identification only, not login verification or collection permission.
  * The catalog adds display names; shared route matching remains authoritative.

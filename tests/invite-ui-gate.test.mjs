@@ -1,26 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-
-const base = new URL('../browser-extension/', import.meta.url);
-test('invitation workspace delegates activation solely to the shared license gate', async () => {
-  const html = await readFile(new URL('invite.html', base), 'utf8');
-  const js = await readFile(new URL('invite.js', base), 'utf8');
-  assert.match(html, /<body data-license-locked>/);
-  assert.equal([...html.matchAll(/id="license-gate"/g)].length, 1);
-  assert.match(js, /await requirePageLicense\(\);/);
-  for (const id of ['license-form', 'activation-code', 'activate', 'verify-license', 'refresh-status', 'license-status']) {
-    assert.ok(!html.includes(`id="${id}"`), `duplicate activation UI: ${id}`);
-    assert.ok(!js.includes(`$('${id}')`), `orphan controller binding: ${id}`);
-  }
-  assert.doesNotMatch(js, /INVITE_ACTIVATE|INVITE_VERIFY/);
-  assert.match(js, /request\('INVITE_STATUS'\)/);
-  assert.match(js, /!license\.valid/);
+import {readFile,access} from 'node:fs/promises';
+const read = path => readFile(new URL('../'+path,import.meta.url),'utf8');
+test('retired invitation entry has no business UI or public iframe access',async()=>{
+ const html=await read('browser-extension/invite.html');
+ assert.match(html,/url=manager.html/);assert.doesNotMatch(html,/<script|<form|invite\.css/);
+ const manifest=JSON.parse(await read('browser-extension/manifest.json'));
+ assert.ok(!manifest.web_accessible_resources.some(row=>row.resources.includes('invite.html')));
+ for(const file of ['invite.js','invite.css','invite-toolbar.js'])await assert.rejects(access(new URL('../browser-extension/'+file,import.meta.url)));
 });
-test('invitation literal controller IDs still exist after activation UI removal', async () => {
-  const html = await readFile(new URL('invite.html', base), 'utf8');
-  const js = await readFile(new URL('invite.js', base), 'utf8');
-  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
-  assert.equal(new Set(ids).size, ids.length);
-  for (const [, id] of js.matchAll(/\$\('([^']+)'\)/g)) assert.ok(ids.includes(id), `missing ${id}`);
+test('React workspace requires trusted embedded context and clears identity on authorization errors',async()=>{
+ const entry=await read('src/invitation-ui/entry.tsx');
+ assert.match(entry,/window===window\.top/);assert.match(entry,/searchParams\.get\('embedded'\)!=='1'/);
+ assert.match(entry,/await request\('INVITE_HOST_CONTEXT'\)/);
+ assert.match(entry,/!auth\.license\?\.valid\|\|!auth\.license\?\.principalId/);
+ assert.match(entry,/clearInvitationWorkspace\(\);setAccountId\(''\);setPrincipalId\(''\)/);
+ assert.doesNotMatch(entry,/INVITE_ACTIVATE|INVITE_VERIFY/);
+});
+test('React filter changes preserve selection and opening compose resets only its limit',async()=>{
+ const list=await read('src/invitation-ui/collection-list.tsx');
+ for(const action of ['setQuery(v)','setFilters(next)']) {
+  const start=list.indexOf(action),block=list.slice(start,list.indexOf('}}',start));
+  assert.match(block,/setPage\(1\)/);assert.doesNotMatch(block,/onSelect|setSelected/);
+ }
+ const entry=await read('src/invitation-ui/entry.tsx');
+ const open=entry.slice(entry.indexOf('const openInvite='),entry.indexOf('return <>',entry.indexOf('const openInvite=')));
+ assert.match(open,/maxInvites:null/);assert.doesNotMatch(open,/INVITE_SEND|\.start\(/);
 });

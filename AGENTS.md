@@ -36,7 +36,7 @@ pnpm package:extension --zip-only
 
 ## 文件与发行
 
-- 源码在 `browser-extension/`，构建产物不提交。
+- 扩展运行入口在 `browser-extension/`，React 工作区源码在 `src/`；构建产物不提交。
 - 保持 Node 24+、Chromium 116+ 的明确兼容边界。
 - `package.json` 与 manifest 版本一致；未经授权不打发行标签。
 - 第三方 vendor 不随意改写，完整许可与 `.LEGAL.txt` 必须进入产物。

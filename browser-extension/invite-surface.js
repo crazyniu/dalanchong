@@ -2,7 +2,7 @@
 import {invitationSource} from './invite-sources.js';
 export function invitationSurface(sender, runtime) {
   if (sender.id !== runtime.id || typeof sender.documentId !== 'string') return null;
-  const own = new URL(runtime.getURL('invite.html'));
+  const own = new URL(runtime.getURL('invitation-workspace.html'));
   let url; try { url = new URL(sender.url); } catch { return null; }
   const isPanel = url.protocol === own.protocol && url.host === own.host && url.pathname === own.pathname;
   const source = invitationSource(sender.tab?.url);

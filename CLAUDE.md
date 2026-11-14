@@ -5,6 +5,7 @@
 主要入口：
 
 - [README](README.md)：当前功能、安装、数据流与开发命令。
+- `src/invitation-ui/entry.tsx`：网页内 React 工作区入口。
 - `browser-extension/background.js`：worker 入口。
 - `browser-extension/invite-background.js`：邀约消息与作用域边界。
 - `browser-extension/license-background.js`：授权状态与撤销事件。

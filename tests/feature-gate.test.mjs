@@ -133,9 +133,9 @@ test('about:blank bootstrap targets verified document and only original inherite
 });
 
 test('invitation toolbar scope removes its frame and polling on revocation', () => {
-  const h = harness(), scope = h.gate.begin('invite-toolbar');
+  const h = harness(), scope = h.gate.begin('invitation-host');
   const host = scope.createElement('div'), panel = scope.createElement('div');
-  let poll = 0, frameSource = 'chrome-extension://own/invite.html?embedded=1';
+  let poll = 0, frameSource = 'chrome-extension://own/invitation-workspace.html?embedded=1';
   scope.setInterval(() => poll++, 500);
   scope.cleanup(() => { frameSource = 'about:blank'; });
   const stale = [...h.timers.values()];

@@ -17,7 +17,7 @@ export function trustedLicensePage(sender) {
     const url = new URL(sender.url);
     const own = new URL(chrome.runtime.getURL('/'));
     if (url.protocol !== own.protocol || url.host !== own.host ||
-        !['/popup.html', '/manager.html', '/invite.html', '/preview.html', '/settings.html'].includes(url.pathname)) return false;
+        !['/popup.html', '/manager.html', '/preview.html', '/settings.html'].includes(url.pathname)) return false;
     // An extension iframe embedded in a remote website is not an activation surface.
     if (sender.tab?.url) {
       const tab = new URL(sender.tab.url);

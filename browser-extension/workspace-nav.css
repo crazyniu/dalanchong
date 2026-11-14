@@ -1,6 +1,7 @@
 .workspace-header {background:var(--surface);border-bottom:1px solid var(--line)}
 .workspace-header-inner {display:flex;align-items:center;gap:28px;max-width:1180px;min-height:64px;margin:0 auto;padding:10px 20px;flex-wrap:wrap}
 .workspace-brand {display:inline-flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;flex:none}
+.workspace-brand:hover {text-decoration:none}
 .workspace-brand img {width:32px;height:32px;object-fit:contain}
 .workspace-brand strong {font-size:18px;font-weight:600}
 .workspace-nav {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -9,4 +10,6 @@
 .workspace-nav a:hover:not([aria-current]),.workspace-nav button:hover {background:var(--bg);color:var(--ink)}
 .workspace-nav :focus-visible {outline:2px solid var(--wa-color-focus);outline-offset:2px}
 .workspace-nav button:disabled {opacity:.5;cursor:wait}
-@media(max-width:620px){.workspace-header-inner{gap:10px;padding:12px 16px}.workspace-nav{width:100%;gap:2px}.workspace-nav a,.workspace-nav button{padding:8px 10px;font-size:14px}}
+@media(max-width:620px){.workspace-header-inner{gap:10px;padding:12px 20px}.workspace-nav{width:100%;gap:2px}.workspace-nav a,.workspace-nav button{padding:8px 10px;font-size:14px}}
+
+@media(max-width:560px){.workspace-header-inner{padding-inline:16px}}

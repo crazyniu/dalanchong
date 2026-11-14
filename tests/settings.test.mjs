@@ -16,7 +16,7 @@ test('settings retain authorization and version without removed shop identity co
 test('shop identity injection and routes are removed without removing capture and invitation tools',async()=>{
  const files=featureScripts.flatMap(script=>script.js||[]);
  assert.ok(!files.includes('shop-label.js'));
- for(const file of ['capture.js','content.js','xhr.js','detail-buttons.js','invite-toolbar.js']) assert.ok(files.includes(file),file);
+ for(const file of ['capture.js','content.js','xhr.js','detail-buttons.js','invitation-host.js']) assert.ok(files.includes(file),file);
  const background=await readFile(new URL('background.js',base),'utf8');
  assert.doesNotMatch(background,/shop-label-background|settings-background/);
  assert.match(background,/initializeFeatureInjection/);

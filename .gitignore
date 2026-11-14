@@ -7,3 +7,9 @@ dist/
 !.env.example
 
 dist-release/
+
+# Built from src/invitation-ui, source platform marks, and audited licenses.
+browser-extension/invitation-ui.js
+browser-extension/invitation-ui.js.LEGAL.txt
+browser-extension/platforms/
+browser-extension/licenses/invitation-ui-LICENSES.txt
