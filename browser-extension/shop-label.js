@@ -7,7 +7,7 @@
  * AI module map
  * Purpose: display the managed shop name on top-level web pages.
  * Entry: licensed navigation scripts and shop-label-background.js inject this isolated script.
- * State: the desktop launcher owns local storage's shopIdentity; changes update the label.
+ * State: profile settings own local storage's shopIdentity; changes update the label.
  * Drag position belongs to this document and resets on navigation; viewport bounds keep it reachable.
  * Side effects: one fixed shadow host; pointer events are captured only on the label. No network access.
  */

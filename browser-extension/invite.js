@@ -11,6 +11,8 @@ import {invitationSources, invitationSource} from './invite-sources.js';
 import {requirePageLicense} from './license-ui.js';
 
 await requirePageLicense();
+const embedded = new URLSearchParams(location.search).get('embedded') === '1' && window.top !== window;
+if (embedded) document.body.dataset.embedded = '';
 
 const $ = id => document.getElementById(id);
 const fields = ['products', 'message', 'phone', 'wechat', 'interval', 'limit'];
@@ -25,6 +27,8 @@ let sessionId = null, observation = null, license = {valid: false, hasCode: fals
 let busy = false, polling = false, disposed = false, rowEpoch = 0, offset = 0, view = 'talents', rows = [];
 const selected = new Set();
 const selectedRecords = new Set();
+const scopeSelections = new Map();
+let selectionScope = null;
 let logOffset = 0, logRows = [];
 const appliedFilters = {talents: {}, records: {}};
 let tasks = [];
@@ -84,6 +88,8 @@ async function refreshSources() {
     if (requestedPlatform !== platform) void refreshSources();
   }
 }
+$('open-compose').addEventListener('click', () => { $('compose-sheet').showModal(); });
+$('close-compose').addEventListener('click', () => { $('compose-sheet').close(); });
 $('refresh-sources').addEventListener('click', refreshSources);
 $('focus-source').addEventListener('click', async () => {
   if (selectedTabId === null) return;
@@ -99,9 +105,12 @@ $('focus-source').addEventListener('click', async () => {
 $('invite-config').addEventListener('submit', event => {
   event.preventDefault();
   void run(async () => {
-    if (!sessionId || !license.valid || !observation?.readiness || !selected.size) throw Error('请确认授权、来源和已选达人。');
+    if (!sessionId || !license.valid || !observation?.readiness) throw Error('请确认授权、来源和已选达人。');
     const config = readConfig();
-    await request('INVITE_SEND', {sessionId, config, ids: [...selected]});
+    const ids = selected.size ? [...selected] : (await request('INVITE_TALENT_IDS', {sessionId, filters: {...appliedFilters.talents, invitationStatus: 'uninvited'}})).ids;
+    if (!ids.length) throw Error('当前筛选中没有未处理达人。');
+    await request('INVITE_SEND', {sessionId, config, ids});
+    $('compose-sheet').close();
     await refreshStatus();
   });
 });
@@ -116,13 +125,16 @@ $('invite-platform').addEventListener('change', () => run(async () => {
   $('focus-source').disabled = true;
   $('source-list').replaceChildren();
   void refreshSources();
+  applyPlatformFields();
+}));
+function applyPlatformFields() {
   for (const field of fields) $(`invite-${field}`).value = drafts[platform][field];
   const douyin = platform === 'douyin';
   $('contact-hint').textContent = douyin ? '抖音手机号和微信号至少填写一项。' : '快手联系方式可选：填写后覆盖平台联系方式，留空时使用平台返回的联系方式。';
   $('product-hint').hidden = !douyin;
   $('message-hint').hidden = !douyin;
   $('invite-interval').min = douyin ? '5000' : '2000';
-}));
+}
 // Explicit defaults avoid restoring browser form values as persisted task configuration.
 $('invite-config').reset();
 async function request(type, payload = {}) {
@@ -144,10 +156,12 @@ function updateControls() {
   $('prepare-source').disabled = busy || selectedTabId === null;
   $('focus-source').disabled = busy || selectedTabId === null;
   $('refresh-sources').disabled = busy || refreshing;
-  $('invite-platform').disabled = busy;
+  $('invite-platform').disabled = busy || embedded;
+  $('open-compose').disabled = busy || !sessionId || !license.valid;
   $('collect').disabled = busy || !sessionId || !license.valid || !observation?.readiness;
-  $('start-invite').disabled = busy || !sessionId || !license.valid || !observation?.readiness || !selected.size;
-  $('start-invite').textContent = `开始邀约（${selected.size} 人）`;
+  $('start-invite').disabled = busy || !sessionId || !license.valid || !observation?.readiness;
+  $('start-invite').textContent = selected.size ? `开始邀约（所选 ${selected.size} 人）` : '邀约当前筛选的未处理达人';
+  $('export-rows').textContent = (view === 'talents' ? selected.size : selectedRecords.size) ? '导出所选 CSV' : '导出当前筛选 CSV';
   // Stop is independent of authorization and in-flight action buttons.
   for (const id of ['stop-task', 'stop-collect', 'stop-invite']) $(id).disabled = !sessionId;
   $('activate').disabled = busy;
@@ -171,7 +185,11 @@ function updateControls() {
     input.disabled = busy; input.checked = Number(input.value) === selectedTabId;
   });
 }
+function rememberSelection() {
+  if (selectionScope) scopeSelections.set(selectionScope, {talents: [...selected], records: [...selectedRecords]});
+}
 async function clearSession() {
+  rememberSelection(); selectionScope = null;
   if (sessionId) {
     try { await request('INVITE_STOP', {sessionId}); }
     catch (error) {
@@ -187,6 +205,14 @@ async function clearSession() {
 function applyObservation(value) {
   observation = value;
   const account = value?.account;
+  if (account?.status === 'online' && account.shopId && license.principalId) {
+    const key = JSON.stringify([license.principalId, platform, account.shopId]);
+    if (selectionScope !== key) {
+      rememberSelection(); selectionScope = key; selected.clear(); selectedRecords.clear();
+      const saved = scopeSelections.get(key);
+      saved?.talents.forEach(id => selected.add(id)); saved?.records.forEach(id => selectedRecords.add(id));
+    }
+  }
   $('observation-status').textContent = account?.status === 'online'
     ? `${account.shopName || '平台账号'}（${account.shopId}） · ${value.readiness ? '来源已就绪' : '等待当前页面列表响应，请在来源页切换筛选。'}`
     : '尚未观察到有效账号，请在来源页面登录并操作筛选。';
@@ -194,7 +220,9 @@ function applyObservation(value) {
 }
 async function refreshStatus() {
   const state = await request('INVITE_STATUS');
-  if (sessionId && license.principalId && state.license.principalId !== license.principalId) await clearSession();
+  if (license.principalId && (!state.license.valid || state.license.principalId !== license.principalId)) {
+    await clearSession(); scopeSelections.clear();
+  }
   license = state.license;
   $('license-status').textContent = license.message || (license.valid ? '授权有效' : '尚未取得有效授权');
   tasks = state.tasks || []; renderTasks();
@@ -441,7 +469,7 @@ function csvCell(value) {
 }
 $('export-rows').addEventListener('click', () => run(async () => {
   const current = sessionId, exportedView = view;
-  const result = await request('INVITE_EXPORT', {sessionId: current, view: exportedView, filters: appliedFilters[exportedView]});
+  const result = await request('INVITE_EXPORT', {sessionId: current, view: exportedView, filters: appliedFilters[exportedView], ids: (exportedView === 'talents' ? selected.size : selectedRecords.size) ? [...(exportedView === 'talents' ? selected : selectedRecords)] : undefined});
   if (current !== sessionId) return;
   if (!Array.isArray(result.rows) || result.rows.length > 10000) throw Error('导出结果无效。');
   const columns = exportedView === 'talents'
@@ -531,7 +559,7 @@ async function poll() {
           const previousAccount = observation?.account?.shopId;
           applyObservation(result.observation);
           if (observation?.account?.shopId !== previousAccount) {
-            selected.clear(); selectedRecords.clear(); $('task-history').replaceChildren(); $('event-logs').replaceChildren(); logOffset = 0; logRows = []; offset = 0; await refreshRows();
+            $('task-history').replaceChildren(); $('event-logs').replaceChildren(); logOffset = 0; logRows = []; offset = 0; await refreshRows();
           }
         }
       }
@@ -551,5 +579,27 @@ let pollTimer;
 const countdownTimer = setInterval(() => { if (tasks.some(task => task.retryAt)) renderTasks(); }, 1000);
 window.addEventListener('pagehide', () => { disposed = true; clearTimeout(pollTimer); clearInterval(countdownTimer); });
 renderRows();
-void refreshSources();
-void poll();
+async function initializeWorkspace() {
+  if (!embedded) { void refreshSources(); void poll(); return; }
+  try {
+    const host = await request('INVITE_HOST_CONTEXT');
+    if (!Number.isInteger(host.tabId) || !['douyin', 'kuaishou'].includes(host.platform)) throw Error('当前来源页面无效。');
+    platform = host.platform; selectedTabId = host.tabId;
+    $('invite-platform').value = platform; applyPlatformFields();
+    await refreshStatus();
+    const result = await request('INVITE_PREPARE', {tabId: selectedTabId, platform});
+    sessionId = result.sessionId; applyObservation(result.observation);
+    const initialView = new URLSearchParams(location.search).get('view');
+    if (initialView === 'records') {
+      view = 'records';
+      for (const name of ['talents', 'records']) {
+        $(name + '-tab').className = `btn ${name === view ? 'primary' : 'outline'}`;
+        $(name + '-tab').setAttribute('aria-pressed', String(name === view));
+      }
+    }
+    await refreshRows();
+    if (initialView === 'logs') { $('logs-panel').open = true; await refreshLogs(); $('logs-panel').scrollIntoView(); }
+  } catch (error) { showError(error); }
+  finally { void poll(); }
+}
+void initializeWorkspace();

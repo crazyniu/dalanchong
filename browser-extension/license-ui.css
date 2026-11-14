@@ -15,4 +15,4 @@ body[data-license-locked] { display: block; overflow: auto; background: var(--bg
 #license-gate .btn { flex: 1; }
 @media (max-width: 520px) { #license-gate { margin: 16px; padding: 20px; } }
 
-.license-ready-hint { margin: 10px 16px; color: var(--muted, #666); font-size: 12px; line-height: 1.5; }
+#license-gate .license-error { color: var(--danger); background: var(--danger-soft); padding: 12px; border-radius: 8px; font-size: 14px; line-height: 1.6; }

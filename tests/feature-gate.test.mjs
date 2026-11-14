@@ -66,7 +66,7 @@ test('only inert bootstrap is static; all business scripts require per-document 
   assert.equal(manifest.content_scripts[0].match_about_blank, true);
   assert.equal(manifest.minimum_chrome_version, '116');
   assert.ok(manifest.permissions.includes('alarms'));
-  assert.equal(featureScripts.length, 7);
+  assert.equal(featureScripts.length, 8);
   for (const script of featureScripts) {
     assert.equal(script.js[0], 'feature-gate.js');
     for (const file of script.js.slice(1)) {
@@ -130,4 +130,17 @@ test('about:blank bootstrap targets verified document and only original inherite
   h.calls.length = 0;
   await h.request({id: 'foreign', tab: {id: 1}, frameId: 2, documentId: 'fake', url: 'https://www.douyin.com'});
   assert.equal(h.calls.length, 0);
+});
+
+test('invitation toolbar scope removes its frame and polling on revocation', () => {
+  const h = harness(), scope = h.gate.begin('invite-toolbar');
+  const host = scope.createElement('div'), panel = scope.createElement('div');
+  let poll = 0, frameSource = 'chrome-extension://own/invite.html?embedded=1';
+  scope.setInterval(() => poll++, 500);
+  scope.cleanup(() => { frameSource = 'about:blank'; });
+  const stale = [...h.timers.values()];
+  h.gate.stop(); stale.forEach(fn => fn());
+  assert.equal(host.removed, true); assert.equal(panel.removed, true);
+  assert.equal(frameSource, 'about:blank'); assert.equal(poll, 0);
+  assert.equal(h.timers.size, 0); assert.equal(scope.active, false);
 });

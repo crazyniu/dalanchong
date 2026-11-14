@@ -1,14 +1,15 @@
 /**
  * AI module map
  * Purpose: sole worker owner of standalone invitation sessions, licensing and jobs.
- * Entry: only exact extension invite.html senders may invoke fixed INVITE_* routes.
+ * Entry: verified extension panels and top-frame toolbar use fixed scoped routes.
  * Flow: explicit preparation pins a Chromium document and account; native-looking
  * platform calls use that document, while IndexedDB owns account-scoped history.
  * State: sessions and running jobs are transient; restart recovery marks uncertainty,
  * never resumes sends. Business data stays local. License traffic uses its own module.
- * Boundary: no content-script calls, arbitrary URLs/scripts, cloud data sync, or
+ * Boundary: no page-message bridge, arbitrary URLs/scripts, cloud data sync, or
  * automatic activation. Invalid authorization stops work; Stop is always available.
  */
+import {invitationSurface, selectedExport} from './invite-surface.js';
 import {listenMessages} from './messages.js';
 import {openInviteStore} from './invite-store.js';
 import {inviteLicense} from './invite-license.js';
@@ -18,6 +19,7 @@ import {createInvitationConnection, refreshInvitationIdentity} from './invite-br
 import {createInviteRuntime} from './invite-runtime.js';
 
 const sessions = new Map();
+const preparing = new Map();
 let initialized, store, runtime;
 onLicenseChange(state => { if (!state.valid) { runtime?.stopAll(); sessions.clear(); } });
 async function initialize() {
@@ -28,13 +30,19 @@ async function initialize() {
   })().catch(error => { initialized = null; throw error; });
   await initialized;
 }
-async function state() {
-  const tasks = new Map();
-  for (const session of sessions.values()) if (session.scope) {
-    for (const task of await store.listTasks(session.scope, {limit: 1000})) tasks.set(task.id, {...task, platform: session.scope.platform, platformAccountId: session.scope.platformAccountId});
+async function state(surface) {
+  const epoch = licenseEpoch();
+  const license = inviteLicense.status();
+  if (!license.valid) return {license,tasks:[]};
+  const tasks = new Map(), scopes = new Set();
+  for (const session of sessions.values()) if (session.scope && session.owners.has(surface.owner) &&
+      (surface.kind === 'page' || session.page.tabId === surface.tabId && session.page.platform === surface.source.platform)) {
+    scopes.add(`${session.scope.platform}:${session.scope.platformAccountId}`);
+    for (const task of await store.listTasks(session.scope, {limit:1000})) tasks.set(task.id,{...task,platform:session.scope.platform,platformAccountId:session.scope.platformAccountId});
   }
-  for (const task of runtime.status()) tasks.set(task.id, task);
-  return {license: inviteLicense.status(), tasks: [...tasks.values()].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 20)};
+  for (const task of runtime.status()) if (scopes.has(`${task.platform}:${task.platformAccountId}`)) tasks.set(task.id,task);
+  if (!inviteLicense.status().valid || licenseEpoch() !== epoch) return {license:inviteLicense.status(),tasks:[]};
+  return {license,tasks:[...tasks.values()].sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt)).slice(0,20)};
 }
 function sessionFor(id) {
   const session = sessions.get(id);
@@ -65,23 +73,51 @@ function requireScope(session) {
   inviteLicense.requireValid(session.scope);
   return session.scope;
 }
-async function handle(message) {
+async function handle(message, surface, cancelled = () => false) {
   await initialize();
-  if (message.type === 'INVITE_STATUS') return state();
+  if (message.type === 'INVITE_HOST_CONTEXT') return {tabId:surface.tabId, platform:surface.source.platform, sourceName:surface.source.name};
+  if (message.type === 'INVITE_STATUS') return state(surface);
   if (message.type === 'INVITE_ACTIVATE') {
     runtime.stopAll();
     try { await inviteLicense.activate(message.code); } finally { await publishLicenseState(); }
-    return state();
+    return state(surface);
   }
   if (message.type === 'INVITE_VERIFY') {
     try { await inviteLicense.verify(); } finally { await publishLicenseState(); }
     if (!inviteLicense.status().valid) runtime.stopAll();
-    return state();
+    return state(surface);
   }
   if (message.type === 'INVITE_PREPARE') {
+    const epoch = licenseEpoch(); requireLicense(epoch);
+    const tabId = surface.kind === 'page' ? message.tabId : surface.tabId;
+    const platform = surface.kind === 'page' ? message.platform : surface.source.platform;
+    if (!Number.isInteger(tabId) || !['douyin','kuaishou'].includes(platform)) throw new Error('来源选择无效');
+    let pending = preparing.get(tabId);
+    if (!pending) {
+      pending = handle({...message,type:'_PREPARE',tabId,platform},surface);
+      preparing.set(tabId,pending);
+    }
+    try {
+      const result = await pending; requireLicense(epoch);
+      sessionFor(result.sessionId).owners.add(surface.owner);
+      return result;
+    } finally { if (preparing.get(tabId) === pending) preparing.delete(tabId); }
+  }
+  if (message.type === '_PREPARE') {
     const epoch = licenseEpoch();
     requireLicense(epoch);
     if (!Number.isInteger(message.tabId) || !['douyin', 'kuaishou'].includes(message.platform)) throw new Error('来源选择无效');
+    if (surface.kind === 'embedded' || surface.kind === 'toolbar') {
+      message = {...message, tabId:surface.tabId, platform:surface.source.platform};
+    }
+    for (const [sessionId, existing] of sessions) if (existing.page.tabId === message.tabId && existing.page.platform === message.platform) {
+      try {
+        const observation = await observe(existing);
+        requireLicense(epoch);
+        existing.owners.add(surface.owner);
+        return {sessionId, observation};
+      } catch { if (existing.scope) runtime.stop(existing.scope); sessions.delete(sessionId); }
+    }
     const page = await prepareObservation(message.tabId, message.platform);
     for (const [id, prior] of sessions) if (prior.page.tabId === message.tabId) {
       if (prior.scope) runtime.stop(prior.scope);
@@ -90,7 +126,7 @@ async function handle(message) {
     requireLicense(epoch);
     const account = await refreshInvitationIdentity(page);
     requireLicense(epoch);
-    const session = {page, account};
+    const session = {page, account, owners:new Set([surface.owner])};
     let observation;
     for (let i = 0; i < 5; i++) {
       observation = await observe(session);
@@ -104,10 +140,12 @@ async function handle(message) {
   }
   if (message.type === 'INVITE_STOP') {
     const stoppedSession = sessions.get(message.sessionId);
+    if (stoppedSession && !stoppedSession.owners.has(surface.owner)) throw new Error('当前页面无权操作此任务');
     if (stoppedSession?.scope) runtime.stop(stoppedSession.scope, message.kind);
     return {};
   }
   const session = sessionFor(message.sessionId);
+  if (!session.owners.has(surface.owner) || surface.kind === 'embedded' && session.page.tabId !== surface.tabId) throw new Error('来源页面不匹配，请重新准备');
   if (message.type === 'INVITE_OBSERVE') return {observation: await observe(session)};
   const scope = requireScope(session);
   if (message.type === 'INVITE_CLEAR_LOGS') return {deleted: await store.clearLogs(scope)};
@@ -118,35 +156,96 @@ async function handle(message) {
   if (message.type === 'INVITE_REVIEW') return {record: await store.resolveReview(scope, message.talentId, message.result)};
   if (message.type === 'INVITE_TASKS') return {rows: await store.listTasks(scope, {limit: 1000})};
   if (message.type === 'INVITE_TALENT_IDS') return {ids: await store.listTalentIds(scope, message.filters)};
-  if (message.type === 'INVITE_EXPORT') return {rows: await store.exportRows(scope, message.filters, message.view === 'records')};
+  if (message.type === 'INVITE_EXPORT') return {rows: selectedExport(await store.exportRows(scope, message.ids ? {} : message.filters, message.view === 'records'), message.ids, message.view === 'records')};
   if (message.type === 'INVITE_DELETE_TALENTS') return {deleted: await store.deleteTalents(scope, message.ids)};
   if (message.type === 'INVITE_TALENTS' || message.type === 'INVITE_RECORDS') {
     const page = {offset: message.offset ?? 0, limit: message.limit ?? 20, filters: message.filters};
     return {rows: await (message.type === 'INVITE_TALENTS' ? store.listTalents(scope, page) : store.listInvitations(scope, page))};
   }
   const observation = await observe(session);
-  if (message.type === 'INVITE_COLLECT') return {task: await runtime.startCollection(scope, session.connection, observation.capture)};
+  if (message.type === 'INVITE_COLLECT') return {task: await runtime.startCollection(scope, session.connection, observation.capture, cancelled)};
   if (message.type === 'INVITE_SEND') return {task: await runtime.startInvitation(scope, session.connection, message.config, message.ids)};
   throw new Error('不支持的邀约操作');
 }
 const types = new Set(['INVITE_STATUS', 'INVITE_ACTIVATE', 'INVITE_VERIFY', 'INVITE_PREPARE', 'INVITE_OBSERVE',
   'INVITE_CLEAR_LOGS', 'INVITE_LOGS', 'INVITE_DELETE_RECORDS', 'INVITE_CONFIG_GET', 'INVITE_CONFIG_SAVE', 'INVITE_REVIEW', 'INVITE_TASKS', 'INVITE_TALENT_IDS', 'INVITE_EXPORT', 'INVITE_DELETE_TALENTS', 'INVITE_COLLECT', 'INVITE_SEND', 'INVITE_STOP', 'INVITE_TALENTS', 'INVITE_RECORDS']);
+types.add('INVITE_HOST_CONTEXT');
 listenMessages(types, (message, sender, respond) => {
-  if (sender.url !== chrome.runtime.getURL('invite.html') || sender.tab?.url && sender.tab.url !== chrome.runtime.getURL('invite.html')) {
-    respond({ok: false, error: '邀约操作仅允许插件工作区发起'}); return;
+  const surface = invitationSurface(sender, chrome.runtime);
+  if (!surface || surface.kind === 'toolbar' || message.type === 'INVITE_HOST_CONTEXT' && surface.kind !== 'embedded') {
+    respond({ok:false,error:'邀约操作仅允许插件工作区发起'}); return;
   }
-  void handle(message).then(payload => respond({ok: true, ...payload}), error => respond({ok: false, error: error.message}));
+  void handle(message, surface).then(payload => respond({ok:true,...payload}), error => respond({ok:false,error:error.message}));
 });
-chrome.tabs.onRemoved.addListener(tabId => {
-  for (const [id, session] of sessions) if (session.page.tabId === tabId) {
+const toolbarTypes = new Set(['INVITE_TOOLBAR_STATUS','INVITE_TOOLBAR_COLLECT','INVITE_TOOLBAR_STOP','INVITE_TOOLBAR_NAV']);
+listenMessages(toolbarTypes, (message, sender, respond) => {
+  const surface = invitationSurface(sender, chrome.runtime);
+  if (surface?.kind !== 'toolbar') { respond({ok:false,error:'来源页面不匹配'}); return; }
+  void toolbar(message, surface).then(payload => respond({ok:true,...payload}), error => respond({ok:false,error:error.message}));
+});
+const preparations = new Map();
+const preparationFailures = new Map();
+const toolbarGenerations = new Map();
+async function toolbar(message, surface) {
+  await initialize(); const epoch = licenseEpoch(); requireLicense(epoch);
+  if (message.type === 'INVITE_TOOLBAR_STOP') toolbarGenerations.set(surface.tabId,(toolbarGenerations.get(surface.tabId) || 0)+1);
+  const generation = toolbarGenerations.get(surface.tabId) || 0;
+  let entry = [...sessions].find(([, item]) => item.page.tabId === surface.tabId && item.page.platform === surface.source.platform);
+  if (entry) {
+    try { await observe(entry[1]); entry[1].owners.add(surface.owner); }
+    catch { if (entry[1].scope) runtime.stop(entry[1].scope); sessions.delete(entry[0]); entry = null; }
+  }
+  if (message.type === 'INVITE_TOOLBAR_STATUS' && !entry) {
+    const last = preparationFailures.get(surface.tabId);
+    if (!last || last.url !== surface.source.origin + surface.source.path || Date.now() - last.at > 30000) {
+      try {
+        const prepared = await handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface);
+        entry = [prepared.sessionId,sessionFor(prepared.sessionId)]; preparationFailures.delete(surface.tabId);
+      } catch (error) {
+        preparationFailures.set(surface.tabId,{url:surface.source.origin + surface.source.path,at:Date.now(),message:error.message});
+      }
+    }
+  }
+  if (message.type === 'INVITE_TOOLBAR_COLLECT' && !entry) {
+    if (preparations.has(surface.tabId)) throw new Error('正在准备当前页面，请稍候');
+    const prepare = handle({type:'INVITE_PREPARE',tabId:surface.tabId,platform:surface.source.platform},surface);
+    preparations.set(surface.tabId,prepare);
+    try { const prepared = await prepare; entry = [prepared.sessionId, sessionFor(prepared.sessionId)]; }
+    finally { preparations.delete(surface.tabId); }
+  }
+  const session = entry?.[1];
+  const tasks = session?.scope ? runtime.status().filter(t => t.platform === session.scope.platform && t.platformAccountId === session.scope.platformAccountId) : [];
+  const active = tasks.filter(t => t.status === 'running');
+  requireLicense(epoch);
+  if (message.type === 'INVITE_TOOLBAR_NAV') {
+    if (active.length) throw new Error('请先停止当前任务');
+    if (message.action === 'back') await chrome.tabs.goBack(surface.tabId);
+    else if (message.action === 'forward') await chrome.tabs.goForward(surface.tabId);
+    else if (message.action === 'home') await chrome.tabs.update(surface.tabId,{url:surface.source.origin + surface.source.path});
+    else throw new Error('导航操作无效');
+  }
+  if (message.type === 'INVITE_TOOLBAR_STOP' && session?.scope) runtime.stop(session.scope);
+  if (message.type === 'INVITE_TOOLBAR_COLLECT') {
+    if (generation !== (toolbarGenerations.get(surface.tabId) || 0)) throw new Error('采集已停止');
+    await handle({type:'INVITE_COLLECT',sessionId:entry[0]},surface,() => generation !== (toolbarGenerations.get(surface.tabId) || 0));
+  }
+  const total = session?.scope ? (await store.listTalentIds(session.scope, {})).length : 0;
+  requireLicense(epoch);
+  const current = session?.scope ? runtime.status().filter(t => t.platform === session.scope.platform && t.platformAccountId === session.scope.platformAccountId && t.status === 'running') : [];
+  return {accountName:session?.account?.name || session?.account?.shopName || '',total,
+    collecting:current.some(t => t.kind === 'collect'), inviting:current.some(t => t.kind === 'invite'),
+    progress:current.map(t => `${t.kind === 'collect' ? '采集' : '邀约'} ${t.processed}/${t.total} · 成功 ${t.success} · 跳过 ${t.skipped} · 失败 ${t.failed} · 待核实 ${t.review}${t.retryAt ? ' · 重试 '+Math.max(0,Math.ceil((t.retryAt-Date.now())/1000))+'秒' : ''}`).join('；'),
+    status:session ? '当前账号已就绪' : (preparationFailures.get(surface.tabId)?.message || '请在网页筛选后采集')};
+}
+function discardTab(tabId) {
+  toolbarGenerations.set(tabId,(toolbarGenerations.get(tabId) || 0)+1);
+  preparationFailures.delete(tabId);
+  for (const [id,session] of sessions) if (session.page.tabId === tabId) {
     if (session.scope) runtime?.stop(session.scope);
     sessions.delete(id);
   }
-});
-chrome.tabs.onUpdated.addListener((tabId, changes) => {
-  if (!changes.url && changes.status !== 'loading') return;
-  for (const [id, session] of sessions) if (session.page.tabId === tabId) {
-    if (session.scope) runtime?.stop(session.scope);
-    sessions.delete(id);
-  }
+}
+chrome.tabs.onRemoved.addListener(discardTab);
+chrome.tabs.onUpdated.addListener((tabId,change) => {
+  if (change.url) discardTab(tabId);
 });

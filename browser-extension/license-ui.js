@@ -43,7 +43,7 @@ export function requirePageLicense() {
     document.body.dataset.licenseLocked = '';
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
     document.querySelectorAll('wa-dialog').forEach(dialog => { dialog.open = false; });
-    gate.hidden = false; status.textContent = message || '请先激活插件。';
+    gate.hidden = false; status.classList.add('license-error'); status.textContent = message || '请先激活插件。';
     for (const media of document.querySelectorAll('video, audio')) {
       media.pause(); media.removeAttribute('src');
       media.querySelectorAll('source').forEach(source => source.removeAttribute('src'));
@@ -58,11 +58,6 @@ export function requirePageLicense() {
     if (!unlocked) {
       unlocked = true; input.value = ''; gate.hidden = true;
       delete document.body.dataset.licenseLocked;
-      if (!embedded && location.pathname !== '/preview.html') {
-        const hint = node('p', '网页工具仅在授权确认后开始识别。若首次打开未识别到视频或达人列表，请回到来源网页刷新或重新操作筛选，再重试；插件不会自动刷新或预先采集。', 'license-ready-hint');
-        hint.setAttribute('role', 'note');
-        gate.after(hint);
-      }
       grant(license);
     }
   }
@@ -80,7 +75,7 @@ export function requirePageLicense() {
   }
   async function action(type, payload = {}) {
     if (busy) return;
-    busy = true; const current = ++revision; controls(); status.textContent = '正在验证授权…';
+    busy = true; const current = ++revision; controls(); status.classList.remove('license-error'); status.textContent = '正在验证授权…';
     try {
       const license = await send(type, payload);
       if (current === revision) apply(license);

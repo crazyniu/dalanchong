@@ -48,6 +48,7 @@ export function verifyPackage(archive, expectedVersion) {
     assert.ok(relative && !relative.startsWith('../') && files.has(relative), `Missing packaged resource: ${reference} (from ${owner})`);
   }
   const manifest = JSON.parse(read('manifest.json'));
+  if (manifest.options_ui?.page) requireFile(manifest.options_ui.page);
   assert.equal(manifest.version, expectedVersion, 'Packaged manifest version mismatch');
   assert.equal(manifest.manifest_version, 3);
   for (const file of [manifest.background?.service_worker, manifest.action?.default_popup,

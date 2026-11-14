@@ -131,5 +131,12 @@ export const featureScripts = [
     "id": "licensed-feature-6",
     "runAt": "document_idle",
     "allFrames": false
+  },
+  {
+    matches: ["https://buyin.jinritemai.com/*", "https://cps.kwaixiaodian.com/*"],
+    js: ["feature-gate.js", "invite-toolbar.js"],
+    id: "licensed-invite-toolbar",
+    runAt: "document_idle",
+    allFrames: false
   }
 ];

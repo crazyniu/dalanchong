@@ -133,6 +133,13 @@ $('open-invite').addEventListener('click', async () => {
   } catch (error) { toast(error.message, true); }
 });
 
+$('open-settings').addEventListener('click', async () => {
+  try {
+    await chrome.tabs.create({url: chrome.runtime.getURL('settings.html')});
+    window.close();
+  } catch (error) { toast(error.message, true); }
+});
+
 $('open-workspace').addEventListener('click', async () => {
   const url = new URL(chrome.runtime.getURL('manager.html'));
   url.searchParams.set('view', 'captured');
