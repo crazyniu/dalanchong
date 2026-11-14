@@ -1,0 +1,38 @@
+<!doctype html>
+<!--
+AI file map
+Purpose: action popup listing all captured videos, queuing downloads and opening video tracing.
+Entry: Chrome action loads popup.js; its IDs are the controller contract.
+Flow: preview opens over the current webpage while this list retains its state.
+Boundary: the background owns verified media and downloads within this Chrome profile.
+-->
+<html lang="zh-CN" class="wa-light">
+<head>
+  <meta charset="UTF-8">
+  <title>视频下载 · 大懒虫</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="license-ui.css">
+</head>
+<body data-license-locked>
+  <section id="license-gate" aria-label="插件激活"><h1>激活大懒虫</h1><p role="status">正在读取授权状态…</p></section>
+  <header class="bar">
+    <div class="brand"><img src="assets/logo.png" alt=""><strong>大懒虫</strong></div>
+    <button id="open-invite" class="btn outline" type="button">达人邀约</button>
+    <button id="open-workspace" class="btn outline" type="button">视频溯源<wa-icon name="maximize"></wa-icon></button>
+  </header>
+  <div class="list-head">
+    <wa-checkbox id="select-all" disabled><span class="sr-only">选择全部视频</span></wa-checkbox>
+    <span>视频列表</span><span id="page-count" class="counter">0</span>
+    <span id="selection-count" class="muted"></span>
+    <button id="clear" class="btn sm danger" type="button" disabled><wa-icon name="trash-2"></wa-icon>清空</button>
+  </div>
+  <main id="media-list" class="media-list" aria-label="捕获的视频"></main>
+  <div id="library-status" class="library-status" role="status"><wa-spinner></wa-spinner><span>正在加载视频…</span></div>
+  <div id="empty" class="empty" hidden><wa-icon name="video"></wa-icon><span>暂无视频</span></div>
+  <footer id="batch-actions" class="batch-actions" hidden>
+    <button id="batch-download" class="btn primary" type="button" disabled><wa-icon name="download"></wa-icon><span id="batch-download-label">全部下载</span></button>
+  </footer>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

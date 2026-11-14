@@ -1,0 +1,9 @@
+node_modules/
+.work/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+
+dist-release/
