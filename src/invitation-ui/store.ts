@@ -1,6 +1,6 @@
 /** Observable account-scoped view state; durable operations belong to the authorized background. */
 import {create} from 'zustand'
-import {bindInvitationSession,invitationRequest,invitationRuntime} from './runtime'
+import {bindInvitationSession,invitationRequest,invitationRuntime,onInvitationMutation} from './runtime'
 import {clearGuestSessions,updateGuestSession} from './browser-session'
 import type {Account,CollectedTalent,DiagnosticLog,InviteConfig,InviteRecord,Platform,Task} from './types'
 export const defaults:InviteConfig={products:'',message:'',phone:'',wechat:'',interval:5000,maxInvites:null}
@@ -10,11 +10,14 @@ let generation=0
 let dataFingerprint='', editRevision=0
 export const useCommerce=create<State>((set)=>({accounts:[],talents:[],records:[],logs:[],tasks:{},configs:{},dataRevision:0,
  saveConfig(id,config){if(current?.accountId!==id)throw Error('当前账号不匹配');editRevision++;set(state=>({configs:{...state.configs,[id]:{...config}}}))},
- async clearTalents(platform,id,ids){await invitationRuntime.deleteData({kind:'talents',platform,accountId:id,ids});bump()},
- async clearRecords(ids){await invitationRuntime.deleteData({kind:'records',ids});bump()},
- async clearLogs(platform,accountId){await invitationRuntime.deleteData({kind:'logs',platform,accountId});bump()},
- async resolveRecord(id,sent){await invitationRuntime.resolveRecord(id,sent);bump()},
+ async clearTalents(platform,id,ids){await invitationRuntime.deleteData({kind:'talents',platform,accountId:id,ids})},
+ async clearRecords(ids){await invitationRuntime.deleteData({kind:'records',ids})},
+ async clearLogs(platform,accountId){await invitationRuntime.deleteData({kind:'logs',platform,accountId})},
+ async resolveRecord(id,sent){await invitationRuntime.resolveRecord(id,sent)},
 }))
+onInvitationMutation(session=>{
+ if(current&&session.sessionId===current.sessionId&&session.platform===current.platform&&session.accountId===current.accountId)bump()
+})
 function bump(){useCommerce.setState(s=>({dataRevision:s.dataRevision+1}))}
 export function clearInvitationWorkspace(){generation++;dataFingerprint='';current=null;bindInvitationSession(null);clearGuestSessions();useCommerce.setState({accounts:[],talents:[],records:[],logs:[],tasks:{},configs:{},dataRevision:useCommerce.getState().dataRevision+1})}
 export function updateInvitationWorkspace(input:{sessionId:string;platform:Platform;accountId:string;observation:any;tasks?:any[]}) {

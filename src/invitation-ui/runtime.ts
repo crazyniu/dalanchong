@@ -5,6 +5,17 @@ type Session = {sessionId:string; platform:Platform; accountId:string}
 export type Query = {kind:string; [key:string]:unknown}
 let binding: Session | null = null
 let revision = 0
+const mutationListeners=new Set<(session:Session)=>void>()
+export function onInvitationMutation(listener:(session:Session)=>void) {
+  mutationListeners.add(listener)
+  return ()=>{mutationListeners.delete(listener)}
+}
+function notifyMutation(token:ReturnType<typeof snapshot>) {
+  if(!binding||token.revision!==revision)return
+  for(const listener of mutationListeners) {
+    try { listener({...token.session}) } catch { /* Refresh subscribers cannot change an operation's result. */ }
+  }
+}
 export function bindInvitationSession(value: Session | null) {
   if (JSON.stringify(binding) !== JSON.stringify(value)) { binding = value && {...value}; revision++ }
 }
@@ -107,7 +118,9 @@ export const invitationRuntime = {
         const result=await send(token,type,{ids:ids.slice(offset,offset+10000)})
         if(!Number.isSafeInteger(result.deleted)||result.deleted<0)throw Error('删除结果无效')
         deleted+=result.deleted
+        notifyMutation(token)
       } catch(error) {
+        notifyMutation(token)
         throw Error(`已确认清理 ${deleted} 条；其余结果未确认，请刷新列表核对。${error instanceof Error?error.message:String(error)}`)
       }
     }
@@ -115,7 +128,7 @@ export const invitationRuntime = {
   },
   async start(accountId:string,config:InviteConfig,ids:string[]) { const token=snapshot({accountId});await send(token,'INVITE_CONFIG_SAVE',{config});return send(token,'INVITE_SEND',{config,ids}) },
   async stop(accountId:string,kind:'collect'|'invite') { return send(snapshot({accountId}),'INVITE_STOP',{kind}) },
-  async resolveRecord(id:string,sent:boolean) { return send(snapshot(),'INVITE_REVIEW',{talentId:id,result:sent?'success':'not-sent'}) },
+  async resolveRecord(id:string,sent:boolean) { const token=snapshot();try { const result=await send(token,'INVITE_REVIEW',{talentId:id,result:sent?'success':'not-sent'});notifyMutation(token);return result } catch(error) {notifyMutation(token);throw error} },
   async openTalentProfile(value:Pick<CollectedTalent,'platform'|'id'|'uid'>) {
     const token=snapshot({platform:value.platform})
     const rows=await exported(token,{kind:'talents',ids:[value.id]})
