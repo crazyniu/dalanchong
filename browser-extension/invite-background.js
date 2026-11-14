@@ -1,6 +1,6 @@
 /**
  * AI module map
- * Purpose: sole worker owner of standalone invitation sessions, licensing and jobs.
+ * Purpose: sole worker owner of scoped invitation sessions, licensing and jobs.
  * Entry: verified extension panels and top-frame toolbar use fixed scoped routes.
  * Flow: explicit preparation pins a Chromium document and account; native-looking
  * platform calls use that document, while IndexedDB owns account-scoped history.
@@ -160,7 +160,11 @@ async function handle(message, surface, cancelled = () => false) {
   if (message.type === 'INVITE_DELETE_TALENTS') return {deleted: await store.deleteTalents(scope, message.ids)};
   if (message.type === 'INVITE_TALENTS' || message.type === 'INVITE_RECORDS') {
     const page = {offset: message.offset ?? 0, limit: message.limit ?? 20, filters: message.filters};
-    return {rows: await (message.type === 'INVITE_TALENTS' ? store.listTalents(scope, page) : store.listInvitations(scope, page))};
+    if (message.type === 'INVITE_TALENTS') {
+      const [rows, sources] = await Promise.all([store.listTalents(scope, page), store.listTalentSources(scope)]);
+      return {rows, sources};
+    }
+    return {rows: await store.listInvitations(scope, page)};
   }
   const observation = await observe(session);
   if (message.type === 'INVITE_COLLECT') return {task: await runtime.startCollection(scope, session.connection, observation.capture, cancelled)};
@@ -234,7 +238,7 @@ async function toolbar(message, surface) {
   requireLicense(epoch);
   const current = session?.scope ? runtime.status().filter(t => t.platform === session.scope.platform && t.platformAccountId === session.scope.platformAccountId && t.status === 'running') : [];
   const loggedIn = session?.account?.status === 'online' && !!session?.scope;
-  const taskProgress = tasks.slice(-2).map(task => ({kind:task.kind,status:task.status,processed:task.processed,total:task.total,success:task.success,failed:task.failed,skipped:task.skipped,review:task.review,retryAt:task.retryAt}));
+  const taskProgress = tasks.slice(-2).map(task => ({kind:task.kind,status:task.status,processed:task.processed,total:task.total,success:task.success,failed:task.failed,skipped:task.skipped,review:task.review,retryAt:task.retryAt,detail:task.detail || ''}));
   return {loggedIn, readiness:loggedIn && toolbarObservation?.readiness === true, tasks:taskProgress, accountName:session?.account?.name || session?.account?.shopName || '',total,
     collecting:current.some(t => t.kind === 'collect'), inviting:current.some(t => t.kind === 'invite'),
     progress:current.map(t => `${t.kind === 'collect' ? '采集' : '邀约'} ${t.processed}/${t.total} · 成功 ${t.success} · 跳过 ${t.skipped} · 失败 ${t.failed} · 待核实 ${t.review}${t.retryAt ? ' · 重试 '+Math.max(0,Math.ceil((t.retryAt-Date.now())/1000))+'秒' : ''}`).join('；'),

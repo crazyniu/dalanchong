@@ -76,3 +76,19 @@ input[type="checkbox"] { accent-color: var(--accent); }
 body[data-embedded] .workspace { padding: 16px; }
 body[data-embedded] #source-panel, body[data-embedded] #platform-control, body[data-embedded] .license-panel, body[data-embedded] .stage { display: none; }
 body[data-embedded] .page-heading { margin-bottom: 12px; }
+
+/* Secondary creator attributes stay in a row-local disclosure, not dozens of columns. */
+.talent-details {min-width:64px;max-width:320px;white-space:normal}
+.talent-details summary {cursor:pointer;font-weight:500;padding:8px 0;color:var(--ink-2)}
+.talent-details dl {display:grid;grid-template-columns:minmax(80px,auto) minmax(90px,1fr);gap:8px 12px;margin:8px 0;min-width:240px;font-size:13px}
+.talent-details dt {color:var(--ink-2)}
+.talent-details dd {margin:0;overflow-wrap:anywhere;color:var(--ink)}
+
+.live-logs-panel { padding: 0 16px 12px; }
+.live-logs-panel > summary { position: sticky; top: 0; z-index: 2; padding: 14px 0; background: var(--surface); cursor: pointer; font-weight: 600; }
+#live-logs-status { font-weight: normal; margin-left: 10px; }
+#live-event-logs { max-height: 280px; overflow: auto; overflow-anchor: none; scrollbar-gutter: stable; }
+#live-event-logs details { padding: 8px 0; border-bottom: 1px solid var(--line); }
+#live-event-logs summary { cursor: pointer; overflow-wrap: anywhere; line-height: 1.6; }
+#live-event-logs pre { max-width: none; }
+#follow-live-logs { margin-top: 8px; }

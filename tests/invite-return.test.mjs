@@ -2,10 +2,25 @@ import test from 'node:test';import assert from 'node:assert/strict';
 globalThis.chrome={runtime:{onMessage:{addListener(){}}},alarms:{onAlarm:{addListener(){}}},tabs:{onRemoved:{addListener(){}}}};
 const {returnToInvitation}=await import('../browser-extension/invite-return-background.js');delete globalThis.chrome;
 const source='https://buyin.jinritemai.com/dashboard/servicehall/daren-square';
-function fixture(){const data={},moves=[];return {data,moves,runtime:{id:'self'},verify(){},storage:{set:async v=>Object.assign(data,v),get:async()=>data},tabs:{get:async()=>({url:'https://buyin.jinritemai.com/login'}),update:async(id,v)=>moves.push({id,...v})}};}
-const sender=url=>({id:'self',frameId:0,url,tab:{id:3,url}});
+function fixture(){const data={},moves=[];return {data,moves,runtime:{id:'self'},verify(){},storage:{set:async v=>Object.assign(data,v),get:async()=>data,remove:async key=>{delete data[key]}},tabs:{get:async()=>({url:fixture.currentUrl}),update:async(id,v)=>moves.push({id,...v})}};}
+const sender=url=>(fixture.currentUrl=url,{id:'self',frameId:0,url,tab:{id:3,url}});
 test('login detour preserves fixed same-platform source and returns only on explicit click',async()=>{const f=fixture();await returnToInvitation({type:'INVITE_RETURN_STATUS'},sender(source),f);const login=sender('https://buyin.jinritemai.com/login');assert.equal((await returnToInvitation({type:'INVITE_RETURN_STATUS'},login,f)).url,source);assert.equal(f.moves.length,0);await returnToInvitation({type:'INVITE_RETURN_OPEN'},login,f);assert.deepEqual(f.moves,[{id:3,url:source}]);});
 test('foreign origin, frames and tampered targets cannot navigate',async()=>{const f=fixture();await assert.rejects(returnToInvitation({},sender('https://evil.invalid'),f));await assert.rejects(returnToInvitation({},{...sender(source),frameId:1},f));f.data['invite-return:3']='https://evil.invalid';assert.equal((await returnToInvitation({type:'INVITE_RETURN_OPEN'},sender('https://buyin.jinritemai.com/login'),f)).url,null);assert.equal(f.moves.length,0);});
 test('revocation while reading saved route fails closed',async()=>{const f=fixture();f.storage.get=async()=>{f.verify=()=>{throw Error('inactive')};return {'invite-return:3':source}};let active=true;f.verify=()=>{if(!active)throw Error('inactive')};f.storage.get=async()=>{active=false;return {'invite-return:3':source}};await assert.rejects(returnToInvitation({type:'INVITE_RETURN_OPEN'},sender('https://buyin.jinritemai.com/login'),f));assert.equal(f.moves.length,0);});
 
 test('navigation during route lookup never pulls a different page back',async()=>{const f=fixture();f.data['invite-return:3']=source;f.tabs.get=async()=>({url:'https://buyin.jinritemai.com/other'});await assert.rejects(returnToInvitation({type:'INVITE_RETURN_OPEN'},sender('https://buyin.jinritemai.com/login'),f));assert.equal(f.moves.length,0);});
+
+test('explicit login return persists a same-source resume hint across documents, cleared only on click',async()=>{
+ const f=fixture();await returnToInvitation({type:'INVITE_RETURN_STATUS'},sender(source),f);
+ await returnToInvitation({type:'INVITE_RETURN_OPEN'},sender('https://buyin.jinritemai.com/login'),f);
+ assert.equal((await returnToInvitation({type:'INVITE_RETURN_STATUS'},sender(source),f)).resume,true);
+ assert.equal((await returnToInvitation({type:'INVITE_RETURN_CLEAR'},sender(source),f)).resume,false);
+ assert.equal((await returnToInvitation({type:'INVITE_RETURN_STATUS'},sender(source),f)).resume,false);
+});
+
+test('navigation while pending flag is persisted cannot pull the new page back',async()=>{
+ const f=fixture();f.data['invite-return:3']=source;
+ const write=f.storage.set;f.storage.set=async values=>{await write(values);fixture.currentUrl='https://buyin.jinritemai.com/other';};
+ await assert.rejects(returnToInvitation({type:'INVITE_RETURN_OPEN'},sender('https://buyin.jinritemai.com/login'),f));
+ assert.equal(f.moves.length,0);
+});

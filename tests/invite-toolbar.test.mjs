@@ -38,7 +38,7 @@ test('toolbar mounts only in licensed top-frame supported route', async () => {
   assert.equal(run({pathname:'/dashboard/servicehall/daren-square/fake'}).html.children.length, 0);
   const f = run(); await tick(); assert.equal(f.html.children.length, 2);
   assert.equal(f.button('邀约达人').textContent, '邀约达人 7');
-  assert.deepEqual(f.sent.map(x => x.type), ['INVITE_TOOLBAR_STATUS']);
+  assert.deepEqual(f.sent.map(x => x.type), ['INVITE_TOOLBAR_STATUS','INVITE_RETURN_STATUS']);
 });
 test('SPA departure removes both hosts and return remounts without duplicating them', async () => {
   const f = run(); await tick();

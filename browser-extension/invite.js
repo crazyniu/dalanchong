@@ -7,8 +7,10 @@
  * Invariants: no auto activation/send; changing source stops old work before losing its stop handle.
  * Side effects: browser tab focus and declared invitation messages; polling only refreshes UI state.
  */
+import {talentCopy, talentTableMetrics, deleteTalentSelection} from './invite-list-actions.js';
 import {invitationSources, invitationSource} from './invite-sources.js';
 import {requirePageLicense} from './license-ui.js';
+import {mountLiveLogs} from './invite-live-logs.js';
 
 if (window.top === window) {
   location.replace(chrome.runtime.getURL('popup.html'));
@@ -21,6 +23,8 @@ if (embedded) document.body.dataset.embedded = '';
 const $ = id => document.getElementById(id);
 const fields = ['products', 'message', 'phone', 'wechat', 'interval', 'limit'];
 const drafts = new Map();
+const composeScopes = new Map();
+let workspaceRestore = Promise.resolve();
 let draftScope = null, composeCount = null;
 let memoryRevision = 0, memoryTimer;
 const loadedScopes = new Set();
@@ -31,9 +35,10 @@ function rememberDraft() {
 }
 function switchDraftScope(key) {
   if (draftScope === key) return;
+  liveLogs.reset();
   clearTimeout(memoryTimer);
   rememberDraft(); void persistWorkspace(); draftScope = key; composeCount = null; memoryRevision++;
-  if (key) void restoreWorkspace(key);
+  workspaceRestore = key ? restoreWorkspace(key) : Promise.resolve();
   $('compose-sheet').close(); applyPlatformFields();
 }
 async function persistWorkspace() {
@@ -41,7 +46,7 @@ async function persistWorkspace() {
   const key = draftScope;
   rememberDraft();
   try {
-    await chrome.storage.session.set({[memoryKey(key)]: {draft: drafts.get(key), talents: [...selected], records: [...selectedRecords]}});
+    await chrome.storage.session.set({[memoryKey(key)]: {draft: drafts.get(key), talents: [...selected], records: [...selectedRecords], composeWasOpen: composeScopes.get(key) === true}});
   } catch (error) { showError(Error('临时工作区保存失败：' + error.message)); }
 }
 async function restoreWorkspace(key) {
@@ -51,6 +56,7 @@ async function restoreWorkspace(key) {
   try {
     const saved = (await chrome.storage.session.get(memoryKey(key)))[memoryKey(key)];
     if (!saved || draftScope !== key || revision !== memoryRevision) return;
+    composeScopes.set(key, saved.composeWasOpen === true);
     if (saved.draft && fields.every(field => typeof saved.draft[field] === 'string')) {
       drafts.set(key, Object.fromEntries(fields.map(field => [field, saved.draft[field]])));
       applyPlatformFields();
@@ -101,6 +107,14 @@ function displayValue(value) {
 const labels = {running: '运行中', queued: '排队中', complete: '已完成', completed: '已完成',
   stopped: '已停止', interrupted: '已中断', success: '成功', failed: '失败', skipped: '已跳过', review: '待核实', sending: '发送中'};
 
+const liveLogs = mountLiveLogs({panel: $('live-logs-panel'), list: $('live-event-logs'), status: $('live-logs-status'),
+  followButton: $('follow-live-logs'), labels,
+  read: async () => (await request('INVITE_LOGS', {sessionId, offset: 0, limit: 200})).rows});
+async function refreshLiveLogs() {
+  await liveLogs.refresh(!disposed && license.valid && observation?.account?.status === 'online' && sessionId && draftScope
+    ? `${sessionId}:${draftScope}` : null);
+}
+
 function textNode(tag, text, className) {
   const node = document.createElement(tag);
   node.textContent = text;
@@ -147,15 +161,33 @@ async function refreshSources() {
     if (requestedPlatform !== platform) void refreshSources();
   }
 }
-$('open-compose').addEventListener('click', () => run(async () => {
+async function openCompose({resume = false} = {}) {
   if (!sessionId || !draftScope || !license.valid) throw Error('请先准备当前账号。');
+  const currentScope = draftScope;
+  await workspaceRestore;
+  if (draftScope !== currentScope) throw Error('当前账号已改变，请重新打开邀约配置。');
+  if (resume && composeScopes.get(currentScope) !== true) return;
   const ids = await eligibleIds();
   composeCount = ids.length;
-  $('invite-limit').value = ''; rememberDraft();
+  if (!ids.length) {
+    closeCompose();
+    throw Error('当前名单没有可邀约达人，已排除所有已有邀约记录。');
+  }
+  if (!resume) $('invite-limit').value = '';
+  rememberDraft();
   $('compose-summary').textContent = `${observation?.account?.shopName || '当前账号'} · 可邀约 ${composeCount} 人（已排除已有记录）`;
-  $('compose-sheet').showModal();
-}));
-$('close-compose').addEventListener('click', () => { $('compose-sheet').close(); });
+  composeScopes.set(currentScope, true);
+  if (!$('compose-sheet').open) $('compose-sheet').showModal();
+  await persistWorkspace();
+}
+function closeCompose() {
+  if (draftScope) composeScopes.set(draftScope, false);
+  $('compose-sheet').close();
+  void persistWorkspace();
+}
+$('open-compose').addEventListener('click', () => run(() => openCompose()));
+$('close-compose').addEventListener('click', closeCompose);
+$('compose-sheet').addEventListener('cancel', event => { event.preventDefault(); closeCompose(); });
 $('refresh-sources').addEventListener('click', refreshSources);
 $('focus-source').addEventListener('click', async () => {
   if (selectedTabId === null) return;
@@ -176,7 +208,7 @@ $('invite-config').addEventListener('submit', event => {
     const ids = await eligibleIds();
     if (!ids.length) throw Error('当前筛选中没有未处理达人。');
     await request('INVITE_SEND', {sessionId, config, ids});
-    $('compose-sheet').close();
+    closeCompose();
     await refreshStatus();
   });
 });
@@ -231,7 +263,8 @@ function updateControls() {
   $('export-rows').textContent = (view === 'talents' ? selected.size : selectedRecords.size) ? '导出所选 CSV' : '导出当前筛选 CSV';
   // Stop is independent of authorization and in-flight action buttons.
   for (const id of ['stop-task', 'stop-collect', 'stop-invite']) $(id).disabled = !sessionId;
-  $('delete-talents').disabled = busy || !sessionId || !license.valid || !selected.size;
+  $('delete-talents').textContent = selected.size ? '删除所选达人' : '删除全部达人';
+  $('delete-talents').disabled = busy || !sessionId || !license.valid || tasks.some(task => task.status === 'running');
   for (const id of ['select-filtered', 'export-rows', 'save-config', 'load-config', 'load-tasks']) $(id).disabled = busy || !sessionId || !license.valid;
   $('record-selection-status').textContent = `已选 ${selectedRecords.size} 条`;
   $('delete-records').disabled = busy || !sessionId || !license.valid || !selectedRecords.size;
@@ -302,10 +335,22 @@ async function refreshRows() {
   const result = await request(view === 'talents' ? 'INVITE_TALENTS' : 'INVITE_RECORDS',
     {sessionId, offset, limit: Number($('page-size').value), filters: appliedFilters[view]});
   if (epoch !== rowEpoch) return;
+  if (view === 'talents') updateSourceOptions(result.sources || []);
   rows = result.rows; renderRows();
 }
+function updateSourceOptions(sources) {
+  const select = $('filter-source');
+  const value = select.value || appliedFilters.talents.source || '';
+  const options = [...new Set(sources.filter(source => typeof source === 'string' && source.trim()))];
+  select.replaceChildren();
+  const all = textNode('option', '全部来源'); all.value = ''; select.append(all);
+  for (const source of options) { const option = textNode('option', source); option.value = source; select.append(option); }
+  if (value && !options.includes(value)) { const option = textNode('option', `${value}（无匹配数据）`); option.value = value; select.append(option); }
+  select.value = value;
+  $('filter-source-label').hidden = options.length === 0 && !value;
+}
 function renderRows() {
-  const columns = metricColumns.filter(([key]) => rows.some(row => row[key] != null && row[key] !== ''));
+  const columns = talentTableMetrics(platform, metricColumns).filter(([key]) => rows.some(row => row[key] != null && row[key] !== ''));
   const head = document.createElement('tr');
   for (const title of view === 'talents' ? ['选择', '达人', '达人 ID', '粉丝', '地区', ...columns.map(([, label]) => label), '操作'] : ['选择', '达人', '达人 ID', '来源', '状态', '时间', '说明', '详情 / 核实'])
     head.append(textNode('th', title));
@@ -329,12 +374,24 @@ function renderRows() {
           : 'https://buyin.jinritemai.com/dashboard/servicehall/daren-profile?' + new URLSearchParams({uid: row.uid, enter_from:'1', scene:'1', author_type:'1'});
         await chrome.tabs.create({url});
       }));
-      const copy = textNode('button', '复制名称 / ID', 'btn outline'); copy.type = 'button';
+      const copied = talentCopy(platform, row);
+      const copy = textNode('button', `复制${copied.label}`, 'btn outline'); copy.type = 'button';
+      copy.disabled = !copied.value;
+      copy.title = copied.value ? `复制${copied.label}` : `缺少${copied.label}`;
       copy.addEventListener('click', () => run(async () => {
-        await navigator.clipboard.writeText(`${row.name || ''}\t${row.id}`);
-        $('rows-status').textContent = '已复制达人名称和 ID。';
+        await navigator.clipboard.writeText(copied.value);
+        $('rows-status').textContent = `${copied.label}已复制。`;
       }));
-      actions.append(profile, copy); tr.append(actions);
+      const details = document.createElement('details'); details.className = 'talent-details';
+      details.append(textNode('summary', '详情'));
+      const values = document.createElement('dl');
+      const detailFields = [['uid', 'UID'], ...metricColumns.filter(([key]) => !columns.some(([column]) => column === key))];
+      for (const [key, label] of detailFields) {
+        if (row[key] == null || row[key] === '') continue;
+        values.append(textNode('dt', label), textNode('dd', displayValue(row[key])));
+      }
+      details.append(values.childElementCount ? values : textNode('p', '暂无更多资料'));
+      actions.append(profile, copy, details); tr.append(actions);
     } else {
       const selectionCell = document.createElement('td');
       const check = document.createElement('input'); check.type = 'checkbox'; check.checked = selectedRecords.has(row.id);
@@ -423,16 +480,25 @@ $('select-page').addEventListener('change', () => {
 });
 $('clear-selection').addEventListener('click', () => { selected.clear(); renderRows(); });
 $('delete-talents').addEventListener('click', () => run(async () => {
-  const ids = [...selected];
-  if (!sessionId || !ids.length) return;
-  if (!window.confirm(`删除所选的 ${ids.length} 位本地达人？邀约历史会保留，删除达人不会允许重复邀约。`)) return;
-  await request('INVITE_DELETE_TALENTS', {sessionId, ids});
-  selected.clear(); offset = 0; await refreshRows();
+  const current = sessionId;
+  if (!current) return;
+  const deleted = await deleteTalentSelection({selected: [...selected],
+    listIds: async () => (await request('INVITE_TALENT_IDS', {sessionId: current, filters: {}})).ids,
+    confirm: message => current === sessionId && window.confirm(message),
+    remove: ids => {
+      if (current !== sessionId) throw Error('当前账号已改变，请重新操作。');
+      return request('INVITE_DELETE_TALENTS', {sessionId: current, ids});
+    },
+  });
+  if (deleted && current === sessionId) { selected.clear(); offset = 0; await refreshRows(); }
 }));
 async function showWorkspaceView(target) {
+  const resumeCompose = target === 'resume-invite';
+  if (resumeCompose) target = 'talents';
   if (target === 'logs') {
     $('logs-panel').open = true;
-    await refreshLogs(); $('logs-panel').scrollIntoView(); return;
+    $('live-logs-panel').open = true; await refreshLiveLogs();
+    await refreshLogs(); $('live-logs-panel').scrollIntoView(); return;
   }
   if (!['talents', 'records'].includes(target)) return;
   view = target; offset = 0;
@@ -442,8 +508,14 @@ async function showWorkspaceView(target) {
     $(name + '-tab').setAttribute('aria-pressed', String(name === view));
   }
   await refreshRows();
+  if (resumeCompose) await openCompose({resume: true});
 }
 for (const target of ['talents', 'records']) $(target + '-tab').addEventListener('click', () => run(() => showWorkspaceView(target)));
+window.addEventListener('message', event => {
+  if (embedded && event.source === window.parent && event.origin === invitationSources.find(source => source.platform === platform)?.origin && event.data?.type === 'INVITE_RESUME_COMPOSE' && sessionId && license.valid) {
+    void run(() => showWorkspaceView('resume-invite'));
+  }
+});
 window.addEventListener('hashchange', () => {
   if (embedded && sessionId && license.valid) void run(() => showWorkspaceView(location.hash.slice(1)));
 });
@@ -629,7 +701,9 @@ async function poll() {
           }
         }
       }
+      await refreshLiveLogs();
     } catch (error) {
+      liveLogs.reset();
       observation = null;
       if (error.message.includes('准备状态已失效')) {
         sessionId = null; selected.clear(); selectedRecords.clear(); $('task-history').replaceChildren(); $('event-logs').replaceChildren(); logOffset = 0; logRows = []; rows = []; rowEpoch++; renderRows();
@@ -643,7 +717,7 @@ async function poll() {
 }
 let pollTimer;
 const countdownTimer = setInterval(() => { if (tasks.some(task => task.retryAt)) renderTasks(); }, 1000);
-window.addEventListener('pagehide', () => { disposed = true; clearTimeout(pollTimer); clearInterval(countdownTimer); });
+window.addEventListener('pagehide', () => { disposed = true; liveLogs.reset(); clearTimeout(pollTimer); clearInterval(countdownTimer); });
 renderRows();
 async function initializeWorkspace() {
   if (!embedded) { void refreshSources(); void poll(); return; }

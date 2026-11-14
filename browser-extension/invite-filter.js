@@ -13,7 +13,7 @@ export function normalizedFilters(input = {}, records = false) {
     if (result.from !== undefined && result.to !== undefined && result.from > result.to) throw new Error('开始日期不能晚于结束日期');
   } else {
     result.invitationStatus = input.invitationStatus || 'all'; result.gender = input.gender || 'all';
-    if (!['all', 'invited', 'uninvited'].includes(result.invitationStatus) || !['all', 'male', 'female', 'unknown'].includes(result.gender)) throw new Error('达人筛选无效');
+    if (!['all', 'invited', 'uninvited', 'pending', 'success', 'failed', 'review', 'skipped', 'sending'].includes(result.invitationStatus) || !['all', 'male', 'female', 'unknown'].includes(result.gender)) throw new Error('达人筛选无效');
     result.source = String(input.source || '').trim().slice(0, 200);
     for (const key of ['minFans', 'maxFans']) if (input[key] !== undefined && input[key] !== '') {
       if (!Number.isFinite(Number(input[key])) || Number(input[key]) < 0) throw new Error('粉丝范围无效');
@@ -25,11 +25,14 @@ export function normalizedFilters(input = {}, records = false) {
 }
 export function matchesTalent(row, filters, invitation) {
   const query = filters.query;
-  if (query && ![row.name, row.id, row.uid].some(value => String(value || '').toLocaleLowerCase().includes(query))) return false;
+  if (query && ![row.name, row.id, row.uid, row.source].some(value => String(value || '').toLocaleLowerCase().includes(query))) return false;
   if (filters.invitationStatus === 'invited' && !invitation || filters.invitationStatus === 'uninvited' && invitation) return false;
+  // Presence filters and outcome filters are distinct: pending has no record; success is confirmed.
+  if (filters.invitationStatus === 'pending' && invitation) return false;
+  if (['success', 'failed', 'review', 'skipped', 'sending'].includes(filters.invitationStatus) && invitation?.status !== filters.invitationStatus) return false;
   const gender = ['male', '男', 1].includes(row.gender) ? 'male' : ['female', '女', 2].includes(row.gender) ? 'female' : 'unknown';
   if (filters.gender !== 'all' && filters.gender !== gender) return false;
-  if (filters.source && !String(row.source || '').includes(filters.source)) return false;
+  if (filters.source && String(row.source || '') !== filters.source) return false;
   if (filters.minFans !== undefined && (!Number.isFinite(row.fans) || row.fans < filters.minFans)) return false;
   if (filters.maxFans !== undefined && (!Number.isFinite(row.fans) || row.fans > filters.maxFans)) return false;
   return true;

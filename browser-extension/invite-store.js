@@ -140,7 +140,8 @@ export async function openInviteStore() {
     if (!limit || limit > 1000) throw new Error('每页数量应为 1–1000');
     return transaction(db, [storeName], 'readonly', (tx, done, on) => {
       const rows = [];
-      const request = tx.objectStore(storeName).index('scope').openCursor(IDBKeyRange.only(key));
+      // Log IDs start with their creation timestamp: newest-first pages feed live activity.
+      const request = tx.objectStore(storeName).index('scope').openCursor(IDBKeyRange.only(key), storeName === 'logs' ? 'prev' : 'next');
       let skipped = false;
       on(request, cursor => {
         if (!cursor || rows.length === limit) { done(rows); return; }
@@ -259,6 +260,13 @@ export async function openInviteStore() {
       });
     },
     listTalents: (scope, page) => query(scope, page),
+    listTalentSources(scope) {
+      const key = scopeKey(scope);
+      return transaction(db, ['talents'], 'readonly', (tx, done, on) =>
+        on(tx.objectStore('talents').index('scope').getAll(IDBKeyRange.only(key)), rows => {
+          done([...new Set(rows.map(row => row.source).filter(value => typeof value === 'string' && value.trim()))].sort((a, b) => a.localeCompare(b, 'zh-CN')));
+        }));
+    },
     listTalentIds: async (scope, filters, excludeInvited = false) => (await query(scope, {filters, excludeInvited}, false, true)).map(row => row.id),
     exportRows: (scope, filters, records = false) => query(scope, {filters}, records, true),
     listTasks: (scope, page) => list('tasks', scope, page),

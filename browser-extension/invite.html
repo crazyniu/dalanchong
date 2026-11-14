@@ -38,12 +38,12 @@ Boundary: background validates authorization and identity; configuration persist
       <div class="section-heading"><div class="actions"><button id="talents-tab" class="btn primary" type="button" aria-pressed="true">达人列表</button><button id="records-tab" class="btn outline" type="button" aria-pressed="false">邀约记录</button></div><button id="refresh-rows" class="btn outline" type="button">刷新列表</button></div>
       <p id="task-status" role="status" class="source-status">暂无任务。</p>
       <form id="list-filters" class="list-filters">
-        <label>搜索<input id="filter-query" type="search" maxlength="200" placeholder="达人名称或 ID"></label>
+        <label>搜索<input id="filter-query" type="search" maxlength="200" placeholder="达人名称、ID 或来源"></label>
         <div id="talent-filters" class="filter-fields">
-          <label>邀约记录<select id="filter-invitation"><option value="all">全部</option><option value="invited">已有记录</option><option value="uninvited">未处理</option></select></label>
+          <label>邀约状态<select id="filter-invitation"><option value="all">全部</option><option value="pending">未邀约</option><option value="success">邀约成功</option><option value="failed">失败</option><option value="review">待核实</option><option value="skipped">已跳过</option><option value="sending">发送中</option><option value="invited">已有任意记录</option><option value="uninvited">无记录</option></select></label>
           <label>性别<select id="filter-gender"><option value="all">全部</option><option value="male">男</option><option value="female">女</option><option value="unknown">未知</option></select></label>
           <label>最少粉丝<input id="filter-min-fans" type="number" min="0" step="1"></label><label>最多粉丝<input id="filter-max-fans" type="number" min="0" step="1"></label>
-          <label>来源包含<input id="filter-source" type="text" maxlength="200"></label>
+          <label id="filter-source-label" hidden>采集来源<select id="filter-source"><option value="">全部来源</option></select></label>
         </div>
         <div id="record-filters" class="filter-fields" hidden>
           <label>状态<select id="filter-status"><option value="all">全部</option><option value="success">成功</option><option value="failed">失败</option><option value="review">待核实</option><option value="skipped">已跳过</option><option value="sending">发送中</option></select></label>
@@ -59,6 +59,12 @@ Boundary: background validates authorization and identity; configuration persist
       <div class="pagination"><label>每页 <select id="page-size"><option>20</option><option>50</option><option>100</option></select> 条</label><button id="previous-page" class="btn outline" type="button" disabled>上一页</button><span id="page-number">第 1 页</span><button id="next-page" class="btn outline" type="button" disabled>下一页</button></div>
     </section>
     <details class="panel data-panel history-panel"><summary>任务记录</summary><div class="section-heading"><h2>本地任务记录</h2><button id="load-tasks" class="btn outline" type="button">刷新任务记录</button></div><p class="muted">当前账号最近 1000 个任务摘要，不是完整逐请求日志。</p><div id="task-history"></div></details>
+    <details id="live-logs-panel" class="panel data-panel live-logs-panel" open>
+      <summary>实时活动 <span id="live-logs-status" class="muted">等待当前账号</span></summary>
+      <div id="live-event-logs" tabindex="0" aria-label="当前账号实时活动"></div>
+      <button id="follow-live-logs" class="btn outline" type="button" hidden>回到最新并自动跟随</button>
+      <p class="muted">仅显示当前账号最近 200 条脱敏活动；展开条目查看详情。向上滚动暂停跟随，完整历史与导出在下方。</p>
+    </details>
     <details id="logs-panel" class="panel data-panel history-panel"><summary>事件日志</summary><div class="section-heading"><h2>本地事件日志</h2><div class="actions"><button id="refresh-logs" class="btn outline" type="button">刷新日志</button><button id="export-logs" class="btn outline" type="button">导出日志 CSV</button><button id="clear-logs" class="btn outline" type="button">清理日志</button></div></div><p class="muted">当前账号的持久脱敏事件，按页读取；不会向平台发送请求。</p><div id="event-logs"></div><div class="pagination"><button id="previous-logs" class="btn outline" type="button">上一页</button><span id="logs-page">第 1 页</span><button id="next-logs" class="btn outline" type="button">下一页</button></div></details>
   </main>
 <dialog id="compose-sheet" class="compose-sheet" aria-labelledby="config-title"><div class="sheet-heading"><h2 id="config-title">邀约配置</h2><button id="close-compose" class="btn outline" type="button">关闭</button></div>
