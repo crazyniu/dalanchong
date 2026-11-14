@@ -19,7 +19,8 @@ test('invalid or malformed authorization blocks platform opening',async()=>{
  await button.click();assert.equal(opens,0);assert.ok(error);assert.equal(button.disabled,false);
 });
 test('licensed invitation navigation focuses existing source without starting jobs',async()=>{
+ globalThis.chrome={runtime:{getURL:path=>'chrome-extension://test/'+path}};
  const messages=[],calls=[];const button={dataset:{invitationPlatform:'douyin'},disabled:false,addEventListener(t,fn){this.click=fn;}};
- bindWorkspaceNavigation({querySelectorAll:()=>[button]},{runtime:{sendMessage:async m=>{messages.push(m.type);return{ok:true,license:{valid:true}};}},tabs:{query:async()=>[{id:4,windowId:2,url:'https://buyin.jinritemai.com/dashboard/servicehall/daren-square'}],update:async id=>calls.push(id)},windows:{update:async id=>calls.push(id)}});
+ bindWorkspaceNavigation({querySelectorAll:()=>[button]},{fetchImpl:async()=>({ok:true,text:async()=> '// workspace'}),runtime:{sendMessage:async m=>{messages.push(m.type);return{ok:true,license:{valid:true}};}},tabs:{query:async()=>[{id:4,windowId:2,url:'https://buyin.jinritemai.com/dashboard/servicehall/daren-square'}],update:async id=>calls.push(id)},windows:{update:async id=>calls.push(id)}});
  await button.click();assert.deepEqual(calls,[4,2]);assert.ok(messages.every(t=>t==='LICENSE_STATUS'));assert.equal(button.disabled,false);
 });

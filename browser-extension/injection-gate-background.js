@@ -1,5 +1,6 @@
 /** License-driven per-document injection. No business scripts are registered persistently. */
 import {featureScripts} from './feature-scripts.js';
+import {assertInvitationAssets} from './workspace-assets.js';
 import {initializeLicense, licenseStatus, licenseEpoch, onLicenseChange} from './license-background.js';
 
 let chain = Promise.resolve();
@@ -72,6 +73,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (message.phase !== 'all' && message.phase !== script.runAt) continue;
       if ((!script.allFrames && sender.frameId !== 0) ||
           !(matches(url, script.matches) || (blank && script.matchAboutBlank && matches(inherited, script.matches)))) continue;
+      if (script.id === 'licensed-invite-toolbar') await assertInvitationAssets();
       if (script.css) await chrome.scripting.insertCSS({target, files: script.css});
       if (!desired || !licenseStatus().valid || epoch !== licenseEpoch()) return {ok: false};
       await chrome.scripting.executeScript({target, world: script.world || 'ISOLATED', files: script.js, injectImmediately: script.runAt === 'document_start'});
@@ -80,6 +82,6 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     });
     chain = operation.catch(() => {});
     return operation;
-  }).then(respond, () => respond({ok: false}));
+  }).then(respond, error => { console.error('网页工具加载失败', error.message); respond({ok: false, error: '网页工具加载失败，请在插件工作区重新打开邀约入口查看提示'}); });
   return true;
 });

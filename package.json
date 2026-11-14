@@ -11,7 +11,9 @@
     "package:extension": "pnpm build:ui && node scripts/package-browser-extension.mjs",
     "check": "pnpm build:ui && tsc --noEmit && node scripts/check-extension.mjs",
     "test": "node --test tests/*.test.mjs",
-    "build:ui": "node scripts/build-invitation-ui.mjs"
+    "build:ui": "node scripts/build-invitation-ui.mjs",
+    "prepare": "pnpm build:ui",
+    "setup:extension": "pnpm install --frozen-lockfile && pnpm build:ui"
   },
   "devDependencies": {
     "@radix-ui/react-alert-dialog": "1.2.1",

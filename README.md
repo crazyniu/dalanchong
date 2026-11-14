@@ -31,7 +31,7 @@
 
 1. 下载无签名 ZIP 并解压，或获取本仓库源码。
 2. 打开浏览器扩展管理页，启用开发者模式，选择「加载已解压的扩展程序」。
-3. ZIP 用户选择解压目录。源码用户先在仓库根目录运行 `pnpm install --frozen-lockfile`、`pnpm build:ui`，再选择 `browser-extension/`；React 工作区、平台图标和许可汇总由构建生成，不能直接省略构建。
+3. ZIP 用户选择解压目录。源码用户在仓库根目录运行 `pnpm setup:extension`，完成依赖安装和工作区构建，再选择 `browser-extension/`。每次拉取更新后重新运行该命令，随后在扩展管理页重新加载插件并刷新商家页面。首次 `pnpm install --frozen-lockfile` 也会自动构建；已缓存的安装可能跳过生命周期脚本，因此更新源码请使用 `pnpm setup:extension` 或手动 `pnpm build:ui`。React 工作区、平台图标和许可汇总不能省略构建。
 4. 点击工具栏中的大懒虫图标，完成激活。
 5. 在浏览器登录平台，打开支持的达人页面，使用底部大懒虫工具栏。
 
