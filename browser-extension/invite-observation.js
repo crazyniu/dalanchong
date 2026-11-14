@@ -7,6 +7,7 @@
  * Boundary: observed account information is not authorization. No collection, replay or invitation sends.
  * Side effects: existing-tab lookup, explicit scripting injection and optional cancellable polling only.
  */
+import {requireLicense, licenseEpoch} from './license-background.js';
 import {invitationObserver} from './invite-observer.js';
 import {invitationSource} from './invite-sources.js';
 import {classifyObservedRequest, interpretObservedResponse} from './invitation-core/platform.mjs';
@@ -18,11 +19,13 @@ function assertRoute(platform, url) {
 }
 
 async function invoke(session, action, payload = {}) {
+  requireLicense(session.licenseEpoch);
   const results = await chrome.scripting.executeScript({
     target: {tabId: session.tabId, documentIds: [session.chromeDocumentId]},
     world: 'MAIN', func: invitationObserver, args: [session.platform, action, {...payload, expected: {documentId: session.pageDocumentId,
       pageUrl: session.pageUrl, routeRevision: session.routeRevision}}],
   });
+  requireLicense(session.licenseEpoch);
   const result = results.find(item => item.frameId === 0 && item.documentId === session.chromeDocumentId);
   if (!result || result.error) throw Error('来源文档已关闭或改变，请重新准备。');
   return result.result;
@@ -84,18 +87,34 @@ function validateSnapshot(session, snapshot) {
 }
 
 export async function prepareObservation(tabId, platform) {
+  requireLicense();
+  const epoch = licenseEpoch();
   const tab = await chrome.tabs.get(tabId);
+  requireLicense(epoch);
   assertRoute(platform, tab.url);
-  const results = await chrome.scripting.executeScript({target: {tabId, frameIds: [0]},
-    world: 'MAIN', func: invitationObserver, args: [platform, 'install']});
+  const gateResults = await chrome.scripting.executeScript({target: {tabId, frameIds: [0]},
+    world: 'MAIN', files: ['feature-gate.js']});
+  requireLicense(epoch);
+  const documentId = gateResults.find(item => item.frameId === 0)?.documentId;
+  if (!documentId) throw Error('来源文档已改变，请重新准备。');
+  const results = await chrome.scripting.executeScript({target: {tabId, documentIds: [documentId]},
+    world: 'MAIN', func: invitationObserver, args: [platform, 'install', {lifecycleEpoch: epoch}]});
   const result = results.find(item => item.frameId === 0);
   const snapshot = result?.result;
+  try { requireLicense(epoch); } catch (error) {
+    if (snapshot?.documentId) {
+      await chrome.scripting.executeScript({target: {tabId, documentIds: [documentId]},
+        world: 'MAIN', func: invitationObserver, args: [platform, 'dispose',
+          {expected: {documentId: snapshot.documentId, pageUrl: snapshot.pageUrl, routeRevision: snapshot.routeRevision}}]}).catch(() => {});
+    }
+    throw error;
+  }
   if (result?.error || !result?.documentId || !snapshot || typeof snapshot.documentId !== 'string' ||
       !Number.isSafeInteger(snapshot.routeRevision) || snapshot.routeRevision < 0)
     throw Error('无法准备当前来源页面。');
   assertRoute(platform, snapshot.pageUrl);
   if (snapshot.pageUrl !== tab.url) throw Error('来源页面已改变，请重新准备。');
-  const session = {tabId, platform, chromeDocumentId: result.documentId,
+  const session = {tabId, platform, licenseEpoch: epoch, chromeDocumentId: result.documentId,
     pageDocumentId: snapshot.documentId, pageUrl: snapshot.pageUrl,
     routeRevision: snapshot.routeRevision, versions: new Map()};
   validateSnapshot(session, snapshot);

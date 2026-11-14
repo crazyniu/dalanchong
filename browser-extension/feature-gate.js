@@ -26,6 +26,7 @@
           for (const fn of cleanup) { try { fn(); } catch {} }
           cleanup.clear();
           eventBindings.clear();
+          if (scopes.get(name) === scope) scopes.delete(name);
         },
         listen(target, type, fn, options) {
           if (!scope.active) return;

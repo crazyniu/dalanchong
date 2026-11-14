@@ -132,10 +132,10 @@ export function createInviteRuntime({store, license, onChange = () => {}}) {
       }
     },
     stopAll() { stopGeneration++; for (const pending of starting.values()) pending.stopped = true; for (const job of jobs.values()) { job.stopped = true; job.wake?.(); } },
-    async startCollection(scope, connection, capture) {
+    async startCollection(scope, connection, capture, cancelled = () => false) {
       if (!capture?.list) throw new Error('请先在当前来源页面搜索或应用筛选');
       const snapshot = structuredClone(capture);
-      const job = await begin(scope, 'collect', connection);
+      const job = await begin(scope, 'collect', connection, 0, cancelled);
       return launch(job, async () => {
         let nextAt = 0;
         await collect({platform: scope.platform, capture: snapshot, stopped: () => job.stopped,

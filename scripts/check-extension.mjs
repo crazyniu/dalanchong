@@ -23,6 +23,7 @@ for (const script of manifest.content_scripts || []) {
 }
 for (const script of featureScripts) for (const file of [...script.js, ...(script.css || [])]) await requireFile(file);
 for (const file of [manifest.background.service_worker, manifest.action.default_popup, ...Object.values(manifest.icons || {}), ...Object.values(manifest.action.default_icon || {})]) await requireFile(file);
+if (manifest.options_ui?.page) await requireFile(manifest.options_ui.page);
 let files = 0;
 async function visit(dir) {
   for (const item of await readdir(dir, {withFileTypes: true})) {
