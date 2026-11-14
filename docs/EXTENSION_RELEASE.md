@@ -33,7 +33,9 @@ CRX3 是签名发行文件，不等于跨浏览器安装许可。官方 Chrome �
 
 本仓库发布浏览器插件。只授予发布 job `contents: write`；打包 job 只读，不从 PR 事件使用签名密钥。
 
-可在 Actions 手动运行，输入**已经存在的**相同格式标签。默认 `publish=false`，只提供 Actions Artifact；明确选择 `publish=true` 才发布。手动运行不接受任意 source_ref，以免版本标签与构建内容不一致。
+可在 Actions 手动运行。只验证签名打包时，留空 `tag`，`source` 选择 `main` 或已合入 main 的完整 40 位提交 SHA，并保持 `publish=false`；此模式只上传 Actions Artifact，不创建标签或 Release。
+
+正式发行时输入**已经存在的**版本标签，版本必须与源码一致。默认 `publish=false`；只有带有效版本标签并明确选择 `publish=true` 才发布。不接受任意分支作为签名来源。
 
 产物目录 `dist-release/browser-extension/`：
 

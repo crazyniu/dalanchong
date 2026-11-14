@@ -6,7 +6,7 @@ const workflow = read('.github/workflows/extension-release.yml');
 test('manual CRX packaging defaults to artifacts, without publishing',()=>{
   assert.match(workflow,/workflow_dispatch:/);
   assert.match(workflow,/publish:[\s\S]*?default: false/);
-  assert.match(workflow,/if: github.event_name == 'push' \|\| inputs.publish/);
+  assert.match(workflow,/if: \(github.event_name == 'push' \|\| inputs.publish\) && needs.package.outputs.tag != ''/);
   assert.match(workflow,/permissions:\n  contents: read/);
   assert.ok(!workflow.includes('pull_request_target'));
 });
@@ -34,4 +34,12 @@ test('tested artifacts retain reviewed source and no automatic update declaratio
   assert.match(workflow,/sha256sum -c SHA256SUMS/);
   assert.match(workflow.slice(workflow.indexOf('Publish complete release')),/test "\$actual" = "\$EXPECTED_COMMIT"/);
   assert.equal(JSON.parse(read('browser-extension/manifest.json')).update_url, undefined);
+});
+
+test('artifact-only source is restricted and never publishes without a tag',()=>{
+  assert.match(workflow,/source:[\s\S]*?default: main/);
+  assert.match(workflow,/test "\$REQUEST_PUBLISH" != true/);
+  assert.match(workflow,/Source must be main or a full commit SHA/);
+  assert.match(workflow,/git checkout --detach origin\/main/);
+  assert.match(workflow,/needs.package.outputs.tag != ''/);
 });
