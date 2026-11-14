@@ -21,7 +21,9 @@ CRX3 是签名发行文件，不等于跨浏览器安装许可。官方 Chrome �
 
 ## 自动打包与发布
 
-每个 PR 与 main 更新会运行 `Browser Extension Package`，仅生成无签名 ZIP 预览及校验和，不读取签名 Secret、不发布版本。这不代替真实浏览器功能验收。
+依赖安装仅允许锁定的 esbuild 安装脚本，不关闭其余依赖的构建审批。
+
+每个 PR 与 main 更新会运行 `Browser Extension Package`，先运行源码/资源检查和无账号测试，再生成无签名 ZIP 预览及校验和，不读取签名 Secret、不发布版本。这不代替真实浏览器功能验收。
 
 
 1. 将工作流、源码和一致版本提交到 `main`。
@@ -58,3 +60,5 @@ pnpm package:extension --tag extension-v0.3.6
 ```
 
 源码内的 README 等维护文档不进入 ZIP，但 `THIRD_PARTY_NOTICES.md`、licenses、LICENSE 与 LEGAL 资源保留。所有生成目录已被 Git 忽略，不能直接修改或提交生成包。
+
+发行标签必须指向已纳入 main 历史的提交，发布前再次核对标签仍指向打包时的精确提交。未经审查的标签不会进入签名发行。

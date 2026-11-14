@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       tag: ${{ steps.source.outputs.tag }}
+      source_commit: ${{ steps.source.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,8 +41,10 @@ jobs:
           set -eu
           [[ "$RELEASE_TAG" =~ ^extension-v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
           git checkout --detach "refs/tags/$RELEASE_TAG"
+          git merge-base --is-ancestor HEAD origin/main || { echo 'Release tag must reference reviewed main history'; exit 1; }
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -50,6 +53,8 @@ jobs:
           version: 11.15.1
           run_install: false
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
       - name: Package signed extension
         env:
           RELEASE_TAG: ${{ steps.source.outputs.tag }}
@@ -87,10 +92,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.package.outputs.tag }}
+          EXPECTED_COMMIT: ${{ needs.package.outputs.source_commit }}
         run: |
           set -eu
           cd package
           sha256sum -c SHA256SUMS
+          actual=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          test "$actual" = "$EXPECTED_COMMIT" || { echo 'Release tag changed during packaging'; exit 1; }
           cat > "$RUNNER_TEMP/extension-notes.md" <<'NOTES'
           浏览器插件独立发行包，源码保留可读；附件 JS 经过空白压缩与局部标识符混淆，不是不可逆加密。
           CRX 使用固定签名身份；ZIP 可用于浏览器开发者模式加载。包含 SHA256SUMS 和 package-info.json。

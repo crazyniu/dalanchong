@@ -13,16 +13,15 @@ import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { prepareExtension } from './prepare-extension.mjs'
+import { validateVersions, verifyPackage } from './verify-package.mjs'
 
 const root = path.resolve(import.meta.dirname, '..')
 const args = process.argv.slice(2)
 const zipOnly = args.includes('--zip-only')
 const tagIndex = args.indexOf('--tag')
 const { version } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
-if (!/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('Invalid Chrome extension version')
-if (tagIndex >= 0 && args[tagIndex + 1] !== `extension-v${version}`) {
-  throw new Error('Extension tag must match package.json version')
-}
+const sourceManifest = JSON.parse(await readFile(path.join(root, 'browser-extension/manifest.json'), 'utf8'))
+validateVersions(version, sourceManifest.version, tagIndex >= 0 ? (args[tagIndex + 1] || '') : undefined)
 const stage = path.join(root, '.work/extension-release/extension')
 const output = path.join(root, 'dist-release/browser-extension')
 let publicKey
@@ -55,6 +54,7 @@ await mkdir(output, { recursive: true })
 const basename = `dalanchong-extension-${version}`
 const names = [`${basename}.zip`]
 execFileSync('zip', ['-qr', path.join(output, names[0]), '.'], { cwd: stage, stdio: 'inherit' })
+verifyPackage(path.join(output, names[0]), version)
 if (!zipOnly) {
   await rm(stage + '.crx', { force: true })
   execFileSync(process.env.CHROME_PATH || 'google-chrome', [

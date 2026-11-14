@@ -8,26 +8,22 @@
  * Purpose: isolated-world bridge for the licensed commerce pages and frames.
  * Entry: page message events from xhr.js and runtime messages from commerce-background.js.
  * Flow: forward tab/download requests to Chrome, return download acknowledgements
- * to the page, and expose the existing downloaded-video storage diagnostics.
+ * to the same source page. No page-triggered storage debugging commands are exposed.
  * State: downloadedVideos belongs to chrome.storage.local; this bridge owns no cache.
  * Boundary: preserve message types and payloads across the page/extension realms;
  * a successful download response acknowledges task creation, not file completion.
  */
 
 scope.listen(window, 'message', (event) => {
+  if (event.source !== window || event.origin !== location.origin) return
   const message = event.data
-  if (!message) return
+  if (!message || typeof message !== 'object') return
 
   if (message.type === 'OPEN_TAB') {
-    chrome.runtime.sendMessage({ type: 'OPEN_TAB', url: message.url })
-  } else if (message.type === 'PRINT_VIDEO_LIST') {
-    chrome.storage.local.get('downloadedVideos', (result) => {
-      console.log('本地存储的downloadedVideos:', result.downloadedVideos)
-    })
-  } else if (message.type === 'CLEAR_STORAGE') {
-    chrome.storage.local.set({ downloadedVideos: [] }, () => {
-      console.log('本地存储已清空')
-    })
+    let url
+    try { url = new URL(message.url) } catch { return }
+    if (!['http:', 'https:'].includes(url.protocol)) return
+    chrome.runtime.sendMessage({ type: 'OPEN_TAB', url: url.href })
   } else if (message.type === 'DOWNLOAD_FILE_REQUEST') {
     console.log(
       'Content script收到下载请求: ' + message.filename + ' 到文件夹: '

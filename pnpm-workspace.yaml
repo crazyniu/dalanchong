@@ -1,0 +1,3 @@
+# Only the pinned bundler may run its installation script.
+allowBuilds:
+  esbuild: true

@@ -3,7 +3,7 @@
  * Preserve paths, exports, page-injected functions, vendor files and licenses.
  * Never rewrite maintained source, introduce eval, or generate signing credentials.
  */
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { transform } from 'esbuild'
 
@@ -15,7 +15,8 @@ export async function prepareExtension(destination) {
   await rm(destination, { recursive: true, force: true })
   await cp(source, destination, {
     recursive: true,
-    filter: (entry) => {
+    filter: async (entry) => {
+      if ((await lstat(entry)).isSymbolicLink()) throw new Error('Source symlinks are not allowed in extension packages')
       const name = path.basename(entry)
       if (name.startsWith('.') || /\.(?:map|pem|key|p12|pfx)$/i.test(name)) return false
       const license = name === 'THIRD_PARTY_NOTICES.md'
