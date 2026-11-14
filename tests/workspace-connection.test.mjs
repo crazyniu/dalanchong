@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {createWorkspaceConnections} from '../browser-extension/workspace-connection.js';
+import {createWorkspaceConnections} from '../browser-extension/invitation/background/workspace-connection.js';
 function harness(initialize=async()=>{}) {
  let connect; const expired=[];
  const runtime={id:'test',getURL:path=>'chrome-extension://test/'+path,onConnect:{addListener:fn=>connect=fn}};
@@ -23,7 +23,7 @@ test('reconnect does not revive old document token; revocation expires live port
  h.port();await new Promise(setImmediate);h.manager.capture(h.surface)();assert.throws(token,/关闭/);
  h.manager.closeAll();assert.throws(()=>h.manager.capture(h.surface),/失效/);assert.equal(h.expired.length,2);
 });
-const source=await readFile(new URL('../browser-extension/invite-background.js',import.meta.url),'utf8');
+const source=await readFile(new URL('../browser-extension/invitation/background/invite-background.js',import.meta.url),'utf8');
 test('delayed NAV and COLLECT cannot outlive their iframe connection',async()=>{
  for(const type of ['INVITE_TOOLBAR_NAV','INVITE_TOOLBAR_COLLECT']) {
   const h=harness(),p=h.port();await new Promise(setImmediate);let release,operations=0;

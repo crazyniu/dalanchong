@@ -9,7 +9,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const result = await build({
   absWorkingDir: root,
   entryPoints: ['src/invitation-ui/entry.tsx'],
-  outfile: 'browser-extension/invitation-ui.js',
+  outfile: 'browser-extension/invitation/ui/invitation-ui.js',
   bundle: true,
   metafile: true,
   format: 'iife',
@@ -40,7 +40,7 @@ const result = await build({
 });
 await mkdir(path.join(root, '.work'), { recursive: true });
 await writeFile(path.join(root, '.work/invitation-ui-metafile.json'), JSON.stringify(result.metafile));
-console.log('Built browser-extension/invitation-ui.js (React + inline Tailwind CSS)');
+console.log('Built browser-extension/invitation/ui/invitation-ui.js (React + inline Tailwind CSS)');
 
 await mkdir(path.join(root, 'browser-extension/platforms'), { recursive: true });
 for (const file of ['douyin.svg', 'kuaishou.svg']) {

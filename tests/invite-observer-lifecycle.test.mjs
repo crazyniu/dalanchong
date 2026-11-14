@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
-import {invitationObserver} from '../browser-extension/invite-observer.js';
-const gateSource = fs.readFileSync(new URL('../browser-extension/feature-gate.js', import.meta.url), 'utf8');
+import {invitationObserver} from '../browser-extension/invitation/content/invite-observer.js';
+const gateSource = fs.readFileSync(new URL('../browser-extension/content/feature-gate.js', import.meta.url), 'utf8');
 function page() {
   class XHR extends EventTarget { open() {} send() {} }
   const target = new EventTarget();
@@ -53,11 +53,11 @@ test('prepare injects MAIN gate first and refuses observer install after epoch c
     requireLicense: expected => {if (expected !== undefined && expected !== epoch) throw Error('stale');}, licenseEpoch: () => epoch,
     chrome: {tabs:{get:async()=>({url:'https://buyin.jinritemai.com/dashboard/servicehall/daren-square'})},
       scripting:{executeScript:async options=>{calls.push(options);epoch++;return [{frameId:0,documentId:'doc'}];}}}});
-  const source=fs.readFileSync(new URL('../browser-extension/invite-observation.js', import.meta.url),'utf8')
+  const source=fs.readFileSync(new URL('../browser-extension/invitation/background/invite-observation.js', import.meta.url),'utf8')
     .replace(/^import .*;\n/gm,'').replace(/^export /gm,'');
   vm.runInContext(source+'\nglobalThis.prepare=prepareObservation;',c);
   await assert.rejects(c.prepare(1,'douyin'), /stale/);
-  assert.equal(calls.length,1);assert.equal(calls[0].world,'MAIN');assert.equal(calls[0].files[0],'feature-gate.js');
+  assert.equal(calls.length,1);assert.equal(calls[0].world,'MAIN');assert.equal(calls[0].files[0],'content/feature-gate.js');
 });
 test('dispose removes scope slot; a different epoch gets a new observer', () => {
   const {context: c} = page();

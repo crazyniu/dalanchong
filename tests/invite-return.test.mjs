@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 globalThis.chrome={runtime:{onMessage:{addListener(){}}},alarms:{onAlarm:{addListener(){}}},tabs:{onRemoved:{addListener(){}}}};
-const {returnToInvitation}=await import('../browser-extension/invite-return-background.js');delete globalThis.chrome;
+const {returnToInvitation}=await import('../browser-extension/invitation/background/invite-return-background.js');delete globalThis.chrome;
 const source='https://buyin.jinritemai.com/dashboard/servicehall/daren-square';
 function fixture(){const data={},moves=[];return {data,moves,runtime:{id:'self'},verify(){},storage:{set:async v=>Object.assign(data,v),get:async()=>data,remove:async key=>{delete data[key]}},tabs:{get:async()=>({url:fixture.currentUrl}),update:async(id,v)=>moves.push({id,...v})}};}
 const sender=url=>(fixture.currentUrl=url,{id:'self',frameId:0,url,tab:{id:3,url}});

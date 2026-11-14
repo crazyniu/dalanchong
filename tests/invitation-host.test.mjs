@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-const code=await readFile(new URL('../browser-extension/invitation-host.js',import.meta.url),'utf8');
+const code=await readFile(new URL('../browser-extension/invitation/content/invitation-host.js',import.meta.url),'utf8');
 function harness({licensed=true,child=false,pathname}={}) {
  const listeners={},cleanups=[],frames=[];let tick,observer;
  const location={origin:'https://buyin.jinritemai.com',pathname:'/dashboard/servicehall/daren-square',href:'https://buyin.jinritemai.com/dashboard/servicehall/daren-square'};

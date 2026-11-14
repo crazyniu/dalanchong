@@ -71,6 +71,32 @@ jobs:
           unset EXTENSION_SIGNING_KEY
           export CHROME_PATH="$(command -v google-chrome)"
           node scripts/package-browser-extension.mjs --tag "$RELEASE_TAG"
+      - name: Verify signed artifacts and release source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.source.outputs.tag }}
+          EXPECTED_COMMIT: ${{ steps.source.outputs.commit }}
+          EXPECTED_ID: ${{ vars.EXTENSION_ID }}
+        run: |
+          set -eu
+          actual=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          test "$actual" = "$EXPECTED_COMMIT" || { echo 'Release tag changed during packaging'; exit 1; }
+          git fetch origin main
+          git merge-base --is-ancestor "$EXPECTED_COMMIT" origin/main || { echo 'Release source no longer belongs to main history'; exit 1; }
+          cd dist-release/browser-extension
+          sha256sum -c SHA256SUMS
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const info = JSON.parse(readFileSync('package-info.json', 'utf8'));
+          assert.equal(info.signed, true, 'Release artifacts must be signed');
+          assert.equal(info.extensionId, process.env.EXPECTED_ID, 'Unexpected extension identity');
+          assert.equal(info.sourceCommit, process.env.EXPECTED_COMMIT, 'Unexpected source commit');
+          const manifest = JSON.parse(execFileSync('unzip', ['-p', `dalanchong-extension-${info.version}.zip`, 'manifest.json'], {encoding:'utf8'}));
+          assert.ok(!Object.hasOwn(manifest, 'update_url'), 'Automatic updates are not enabled');
+          NODE
       - uses: actions/upload-artifact@v4
         with:
           name: browser-extension

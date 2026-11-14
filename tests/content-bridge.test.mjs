@@ -8,7 +8,7 @@ test('commerce bridge rejects foreign frames, origins and storage debug commands
   const scope = {listen: (target, name, callback) => { handler = callback; }, chromeListen() {}};
   const context = {window, location: {origin}, URL, chrome: {runtime: {sendMessage: message => sent.push(message), onMessage: {}}},
     __dlcFeatureGate: {begin: () => scope}};
-  vm.runInNewContext(await readFile(new URL('../browser-extension/content.js', import.meta.url), 'utf8'), context);
+  vm.runInNewContext(await readFile(new URL('../browser-extension/content/content.js', import.meta.url), 'utf8'), context);
   for (const event of [
     {source: {}, origin, data: {type: 'OPEN_TAB', url: 'https://www.douyin.com/'}},
     {source: window, origin: 'https://other.test', data: {type: 'OPEN_TAB', url: 'https://www.douyin.com/'}},

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {talentCopy,talentTableMetrics,deleteTalentSelection} from '../browser-extension/invite-list-actions.js';
+import {talentCopy,talentTableMetrics,deleteTalentSelection} from '../browser-extension/invitation/shared/invite-list-actions.js';
 test('platform copy has exact single value; missing nickname is not fabricated',()=>{
  assert.deepEqual(talentCopy('douyin',{name:'昵称',id:'123'}),{label:'昵称',value:'昵称'});
  assert.deepEqual(talentCopy('kuaishou',{name:'昵称',id:'123',uid:'456'}),{label:'快手号',value:'123'});

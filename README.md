@@ -29,11 +29,23 @@
 
 ## 安装与激活
 
-1. 下载无签名 ZIP 并解压，或获取本仓库源码。
-2. 打开浏览器扩展管理页，启用开发者模式，选择「加载已解压的扩展程序」。
-3. ZIP 用户选择解压目录。源码用户在仓库根目录运行 `pnpm setup:extension`，完成依赖安装和工作区构建，再选择 `browser-extension/`。每次拉取更新后重新运行该命令，随后在扩展管理页重新加载插件并刷新商家页面。首次 `pnpm install --frozen-lockfile` 也会自动构建；已缓存的安装可能跳过生命周期脚本，因此更新源码请使用 `pnpm setup:extension` 或手动 `pnpm build:ui`。React 工作区、平台图标和许可汇总不能省略构建。
-4. 点击工具栏中的大懒虫图标，完成激活。
-5. 在浏览器登录平台，打开支持的达人页面，使用底部大懒虫工具栏。
+### macOS 一键准备
+
+获取源码后，双击根目录的 **`一键安装.command`**。也可以在终端运行：
+
+```sh
+bash scripts/setup-macos.sh
+```
+
+脚本会检查 Node.js，在需要时下载官方 Node.js 24 并校验 SHA256；固定安装项目专用 pnpm 11.15.1，然后安装依赖并构建。工具与缓存仅放在项目 `.tools/`，不需要 sudo，不修改全局 Node/pnpm、Shell 配置或浏览器安全设置。若 macOS 阻止执行文件，请在终端使用上面的 `bash` 命令；不要关闭系统安全保护。
+
+完成后在扩展管理页启用开发者模式，选择「加载已解压的扩展程序」并选择本项目的 `browser-extension/`。点击插件图标完成激活，在浏览器登录平台后打开支持的达人页面。
+
+每次更新源码后重新运行脚本，再重新加载扩展并刷新商家页面。若脚本失败，请保留终端中的具体错误，不要继续加载未构建的目录。
+
+### 已有开发环境或 ZIP
+
+源码用户也可以运行 `pnpm setup:extension` 完成依赖安装与构建。首次安装会通过 prepare 构建，缓存安装可能跳过生命周期，所以更新源码仍应使用 setup 或手动 `pnpm build:ui`。已构建 ZIP 用户直接加载解压目录即可。
 
 不同 Chromium 浏览器的安装政策可能不同；CRX 签名不等于可以在所有浏览器中直接安装。正式签名发行参见[构建与发布](docs/EXTENSION_RELEASE.md)。
 
@@ -78,7 +90,12 @@ pnpm package:extension --zip-only
 输出位于 `dist-release/browser-extension/`。压缩处理只作用于构建副本，不改写可读源码。测试默认不使用真实激活码、不访问平台、不发送邀约。
 
 ```text
-browser-extension/    扩展页面、worker、网页适配与本机存储
+browser-extension/    固定加载目录、manifest 与兼容页面入口
+  background/        后台服务与授权
+  content/           网页视频适配脚本
+  pages/             管理、设置、预览、弹窗脚本及样式
+  shared/            公共组件与数据工具
+  invitation/        邀约后台、网页宿主、核心适配和生成 UI
 src/invitation-ui/    网页内 React 工作区与浏览器状态桥
 src/components/       界面组件
 src/styles/           工作区样式
@@ -91,9 +108,9 @@ docs/                发行与验收说明
 
 ## 文档
 
-- [视频工具](browser-extension/README.md)
-- [达人邀约](browser-extension/INVITATIONS.md)
-- [授权与规则接口边界](browser-extension/INVITATION_LICENSE.md)
+- [视频工具](docs/extension/README.md)
+- [达人邀约](docs/extension/INVITATIONS.md)
+- [授权与规则接口边界](docs/extension/INVITATION_LICENSE.md)
 - [验证与验收](docs/TESTING.md)
 - [构建与发布](docs/EXTENSION_RELEASE.md)
 - [贡献与代理开发约定](AGENTS.md)

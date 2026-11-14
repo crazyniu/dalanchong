@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 const originalChrome = globalThis.chrome;
 globalThis.chrome = {alarms: {onAlarm: {addListener() {}}}, runtime: {onMessage: {addListener() {}}}};
-const {createContextMenuController} = await import('../browser-extension/context-menu-background.js');
+const {createContextMenuController} = await import('../browser-extension/background/context-menu-background.js');
 if (originalChrome === undefined) delete globalThis.chrome; else globalThis.chrome = originalChrome;
 const root = 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/';
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return {promise, resolve}; };

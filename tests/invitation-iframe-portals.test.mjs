@@ -13,7 +13,7 @@ test('isolated frame uses Radix default document portals without shadow adapters
   const entry = await readFile(new URL('src/invitation-ui/entry.tsx', root), 'utf8');
   assert.match(entry, /window\s*===\s*window\.top/);
   assert.doesNotMatch(entry, /attachShadow|PortalContainerProvider/);
-  const host = await readFile(new URL('browser-extension/invitation-host.js', root), 'utf8');
+  const host = await readFile(new URL('browser-extension/invitation/content/invitation-host.js', root), 'utf8');
   assert.match(host, /createElement\('iframe'\)/);
   assert.match(host, /invitation-workspace\.html\?embedded=1/);
 });

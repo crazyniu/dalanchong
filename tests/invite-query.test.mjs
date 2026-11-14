@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {queryInvitationData} from '../browser-extension/invite-query.js';
+import test from 'node:test';import assert from 'node:assert/strict';import {queryInvitationData} from '../browser-extension/invitation/background/invite-query.js';
 const scope={userId:'p',platform:'douyin',platformAccountId:'a'};
 const talents=Array.from({length:10000},(_,i)=>({id:String(i),name:'Talent '+i,source:i%2?'广场':'推荐',fans:i,...(i===9999?{sales30d:'100'}:{})}));
 const records=talents.map(row=>({id:row.id,talentId:row.id,status:'success'}));
@@ -21,7 +21,7 @@ test('single record and malformed queries stay scoped and bounded',async()=>{
 
 test('IndexedDB 10000-row dataset filters, paginates and isolates scope',async t=>{
  const {indexedDB,IDBKeyRange}=await import('fake-indexeddb');globalThis.indexedDB=indexedDB;globalThis.IDBKeyRange=IDBKeyRange;
- const {openInviteStore}=await import('../browser-extension/invite-store.js');
+ const {openInviteStore}=await import('../browser-extension/invitation/background/invite-store.js');
  const db=await openInviteStore();const a={userId:'perf',platform:'douyin',platformAccountId:'a'},b={...a,platformAccountId:'b'};
  try {
   const seedStart=performance.now();

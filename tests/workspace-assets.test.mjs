@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assertInvitationAssets} from '../browser-extension/workspace-assets.js';
-import {bindWorkspaceNavigation} from '../browser-extension/workspace-nav.js';
+import {assertInvitationAssets} from '../browser-extension/invitation/shared/workspace-assets.js';
+import {bindWorkspaceNavigation} from '../browser-extension/shared/workspace-nav.js';
 const message = /邀约工作区尚未构建.*pnpm install --frozen-lockfile.*pnpm build:ui.*重新加载插件/;
 globalThis.chrome = {runtime:{getURL:path=>'chrome-extension://test/'+path}};
 test('workspace check reads only the packaged local script', async()=>{
   const urls=[];
   await assertInvitationAssets(async url=>{urls.push(url);return {ok:true,text:async()=> ' // bundled workspace\n'};});
-  assert.deepEqual(urls,['chrome-extension://test/invitation-ui.js']);
+  assert.deepEqual(urls,['chrome-extension://test/invitation/ui/invitation-ui.js']);
 });
 test('missing, failed and empty workspace all give actionable build diagnostic',async()=>{
   for(const fetchImpl of [async()=>{throw Error('missing');},async()=>({ok:false}),async()=>({ok:true,text:async()=>''}),async()=>({ok:true,text:async()=> ' \n'}),async()=>({ok:true,text:async()=>{throw Error('read failed');}})]) {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {indexedDB, IDBKeyRange} from 'fake-indexeddb';
-import {openInviteStore} from '../browser-extension/invite-store.js';
+import {openInviteStore} from '../browser-extension/invitation/background/invite-store.js';
 globalThis.indexedDB = indexedDB; globalThis.IDBKeyRange = IDBKeyRange;
 test('invitation eligibility intersects current filters with absence of any account-scoped record', async () => {
   const store = await openInviteStore();

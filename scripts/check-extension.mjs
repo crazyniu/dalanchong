@@ -3,7 +3,7 @@ import {readFile, readdir, stat} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import {featureScripts} from '../browser-extension/feature-scripts.js';
+import {featureScripts} from '../browser-extension/shared/feature-scripts.js';
 const root = path.resolve(import.meta.dirname, '..');
 const extension = path.join(root, 'browser-extension');
 const manifest = JSON.parse(await readFile(path.join(extension, 'manifest.json')));

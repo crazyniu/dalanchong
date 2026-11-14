@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {indexedDB,IDBKeyRange} from 'fake-indexeddb';import {openInviteStore} from '../browser-extension/invite-store.js';
+import {indexedDB,IDBKeyRange} from 'fake-indexeddb';import {openInviteStore} from '../browser-extension/invitation/background/invite-store.js';
 globalThis.indexedDB=indexedDB;globalThis.IDBKeyRange=IDBKeyRange;
 test('selected log deletion is account-scoped and retains running-task protection',async()=>{
  const store=await openInviteStore();const scope=id=>({userId:'p',platform:'douyin',platformAccountId:id});const a=scope('a'),b=scope('b');

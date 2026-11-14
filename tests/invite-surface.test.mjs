@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {invitationSurface, selectedExport} from '../browser-extension/invite-surface.js';
+import {invitationSurface, selectedExport} from '../browser-extension/invitation/shared/invite-surface.js';
 const id='a'.repeat(32), root=`chrome-extension://${id}/`;
 const runtime={id,getURL:p=>root+p};
 const source='https://buyin.jinritemai.com/dashboard/servicehall/daren-square';

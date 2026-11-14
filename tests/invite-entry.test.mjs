@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {openInvitationSource} from '../browser-extension/invite-entry.js';
+import {openInvitationSource} from '../browser-extension/invitation/shared/invite-entry.js';
 const dy='https://buyin.jinritemai.com/dashboard/servicehall/daren-square';
 const ks='https://cps.kwaixiaodian.com/zone/daren-match/peer-reference';
 function fixture(all=[]) { const events=[]; return {events,tabs:{query:async()=>all,update:async(id,options)=>events.push({id,...options}),create:async options=>events.push(options)},verify:async()=>{}}; }

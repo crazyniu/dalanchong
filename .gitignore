@@ -9,7 +9,10 @@ dist/
 dist-release/
 
 # Built from src/invitation-ui, source platform marks, and audited licenses.
-browser-extension/invitation-ui.js
-browser-extension/invitation-ui.js.LEGAL.txt
+browser-extension/invitation/ui/invitation-ui.js
+browser-extension/invitation/ui/invitation-ui.js.LEGAL.txt
 browser-extension/platforms/
 browser-extension/licenses/invitation-ui-LICENSES.txt
+
+# Local macOS bootstrap tools and caches (never commit).
+.tools/

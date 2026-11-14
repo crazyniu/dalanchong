@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {bindWorkspaceNavigation,verifyWorkspaceLicense} from '../browser-extension/workspace-nav.js';
+import {bindWorkspaceNavigation,verifyWorkspaceLicense} from '../browser-extension/shared/workspace-nav.js';
 const read = name => fs.readFileSync(new URL('../browser-extension/'+name,import.meta.url),'utf8');
 test('popup contains only More entry; both full pages share four navigation choices',()=>{
  const popup=read('popup.html');assert.match(popup,/id="open-more"[^>]*>更多/);assert.doesNotMatch(popup,/workspace-actions|open-invite-|open-workspace|open-settings/);
@@ -9,7 +9,7 @@ test('popup contains only More entry; both full pages share four navigation choi
   const html=read(page);for(const name of ['视频批量下载','抖音邀约','快手邀约','设置'])assert.ok(html.includes(name));
   assert.match(html,/workspace-nav.css/);assert.match(html,/aria-current="page"/);
  }
- assert.match(read('popup.js'),/manager\.html/);assert.match(read('popup.js'),/searchParams.set\('ids'/);
+ assert.match(read('pages/popup/popup.js'),/manager\.html/);assert.match(read('pages/popup/popup.js'),/searchParams.set\('ids'/);
 });
 test('invalid or malformed authorization blocks platform opening',async()=>{
  await assert.rejects(verifyWorkspaceLicense({sendMessage:async()=>({ok:true,license:{valid:false}})}));

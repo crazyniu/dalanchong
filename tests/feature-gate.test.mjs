@@ -3,8 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {featureScripts} from '../browser-extension/feature-scripts.js';
-const source = await readFile(new URL('../browser-extension/feature-gate.js', import.meta.url), 'utf8');
+import {featureScripts} from '../browser-extension/shared/feature-scripts.js';
+const source = await readFile(new URL('../browser-extension/content/feature-gate.js', import.meta.url), 'utf8');
 function harness() {
   const timers = new Map(), listeners = new Set(), nodes = [];
   let id = 0, disconnected = 0;
@@ -68,7 +68,7 @@ test('only inert bootstrap is static; all business scripts require per-document 
   assert.ok(manifest.permissions.includes('alarms'));
   assert.equal(featureScripts.length, 7);
   for (const script of featureScripts) {
-    assert.equal(script.js[0], 'feature-gate.js');
+    assert.equal(script.js[0], 'content/feature-gate.js');
     for (const file of script.js.slice(1)) {
       const text = await readFile(new URL('../browser-extension/' + file, import.meta.url), 'utf8');
       assert.match(text, /__dlcFeatureGate\?\.begin/);
@@ -77,7 +77,7 @@ test('only inert bootstrap is static; all business scripts require per-document 
   }
 });
 
-const injectionSource = (await readFile(new URL('../browser-extension/injection-gate-background.js', import.meta.url), 'utf8'))
+const injectionSource = (await readFile(new URL('../browser-extension/background/injection-gate-background.js', import.meta.url), 'utf8'))
   .replace(/^import .*;\n/gm, '').replace('export function initializeFeatureInjection', 'function initializeFeatureInjection');
 function injectionHarness() {
   let state = {valid: false}, epoch = 0, changed, message, registerWait;
@@ -125,7 +125,7 @@ test('about:blank bootstrap targets verified document and only original inherite
   await h.request({id: 'own', tab: {id: 1}, frameId: 2, documentId: 'frame-document', url: 'about:blank', origin: 'https://www.douyin.com'});
   const injections = h.calls.filter(call => call[0] === 'business');
   assert.equal(injections.length, 1);
-  assert.deepEqual(Array.from(injections[0][1].files), ['feature-gate.js', 'capture.js']);
+  assert.deepEqual(Array.from(injections[0][1].files), ['content/feature-gate.js', 'content/capture.js']);
   assert.deepEqual(Array.from(injections[0][1].target.documentIds), ['frame-document']);
   h.calls.length = 0;
   await h.request({id: 'foreign', tab: {id: 1}, frameId: 2, documentId: 'fake', url: 'https://www.douyin.com'});

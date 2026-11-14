@@ -2,9 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {createInviteRuntime} from '../browser-extension/invite-runtime.js';
+import {createInviteRuntime} from '../browser-extension/invitation/background/invite-runtime.js';
 import {readFile} from 'node:fs/promises';
-const source = (await readFile(new URL('../browser-extension/invite-background.js', import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
+const source = (await readFile(new URL('../browser-extension/invitation/background/invite-background.js', import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
 const defer = () => { let resolve; const promise=new Promise(r=>{resolve=r;}); return {promise,resolve}; };
 function setup() {
   let valid=true, epoch=0;

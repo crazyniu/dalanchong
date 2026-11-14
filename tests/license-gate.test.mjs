@@ -42,8 +42,8 @@ test('central worker license gate and delayed business responses', async t => {
     if (originalChrome) Object.defineProperty(globalThis, 'chrome', originalChrome); else delete globalThis.chrome;
     if (originalLocks) Object.defineProperty(navigator, 'locks', originalLocks); else delete navigator.locks;
   });
-  const background = await import('../browser-extension/license-background.js');
-  const {listenMessages} = await import('../browser-extension/messages.js');
+  const background = await import('../browser-extension/background/license-background.js');
+  const {listenMessages} = await import('../browser-extension/background/messages.js');
   function send(message, sender = owner) {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(Error('Mock message received no response')), 1000);

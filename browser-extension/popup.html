@@ -10,9 +10,9 @@ Boundary: the background owns verified media and downloads within this Chrome pr
 <head>
   <meta charset="UTF-8">
   <title>视频下载 · 大懒虫</title>
-  <link rel="stylesheet" href="theme.css">
-  <link rel="stylesheet" href="popup.css">
-  <link rel="stylesheet" href="license-ui.css">
+  <link rel="stylesheet" href="shared/theme.css">
+  <link rel="stylesheet" href="pages/popup/popup.css">
+  <link rel="stylesheet" href="shared/license-ui.css">
 </head>
 <body data-license-locked>
   <section id="license-gate" aria-label="插件激活"><h1>激活大懒虫</h1><p role="status">正在读取授权状态…</p></section>
@@ -32,6 +32,6 @@ Boundary: the background owns verified media and downloads within this Chrome pr
   <footer id="batch-actions" class="batch-actions" hidden>
     <button id="batch-download" class="btn primary" type="button" disabled><wa-icon name="download"></wa-icon><span id="batch-download-label">全部下载</span></button>
   </footer>
-  <script type="module" src="popup.js"></script>
+  <script type="module" src="pages/popup/popup.js"></script>
 </body>
 </html>

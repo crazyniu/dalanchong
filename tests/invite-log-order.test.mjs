@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {indexedDB, IDBKeyRange} from 'fake-indexeddb';
-import {openInviteStore} from '../browser-extension/invite-store.js';
-import {createLiveLogFeed} from '../browser-extension/invite-live-logs.js';
+import {openInviteStore} from '../browser-extension/invitation/background/invite-store.js';
+import {createLiveLogFeed} from '../browser-extension/invitation/shared/invite-live-logs.js';
 globalThis.indexedDB = indexedDB; globalThis.IDBKeyRange = IDBKeyRange;
 test('real persisted logs show newest 200, paginate older events, and never mix accounts', async () => {
  const store = await openInviteStore();

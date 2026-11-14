@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createInviteRuntime} from '../browser-extension/invite-runtime.js';
+import {createInviteRuntime} from '../browser-extension/invitation/background/invite-runtime.js';
 
 const scope = {userId: 'profile', platform: 'kuaishou', platformAccountId: 'shop'};
 const config = {products: '123', message: '合作邀请', phone: '', wechat: 'contact', interval: 0};

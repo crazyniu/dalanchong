@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {indexedDB, IDBKeyRange} from 'fake-indexeddb';
-import {normalizedFilters, matchesTalent} from '../browser-extension/invite-filter.js';
-import {openInviteStore} from '../browser-extension/invite-store.js';
+import {normalizedFilters, matchesTalent} from '../browser-extension/invitation/shared/invite-filter.js';
+import {openInviteStore} from '../browser-extension/invitation/background/invite-store.js';
 globalThis.indexedDB=indexedDB;globalThis.IDBKeyRange=IDBKeyRange;
 const talent={id:'1',name:'Alice',source:'达人广场',fans:0};
 test('talent statuses distinguish no record, success, failures, uncertain and legacy presence',()=>{

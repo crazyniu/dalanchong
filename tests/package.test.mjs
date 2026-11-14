@@ -12,9 +12,9 @@ const manifest = {manifest_version: 3, version: '0.3.6', background: {service_wo
   web_accessible_resources: [{resources: ['popup.html']}]};
 const base = () => Object.entries({
   'manifest.json': JSON.stringify(manifest), 'background.js': 'import "./helper.js";',
-  'helper.js': 'export const value = 1;', 'popup.html': '<script src="popup.js"></script><link href="style.css" rel="stylesheet">',
-  'popup.js': 'chrome.runtime.getURL("/");', 'style.css': 'body{color:black}',
-  'feature-bootstrap.js': '', 'feature-scripts.js': 'export const scripts=[{js:["helper.js"]}];',
+  'helper.js': 'export const value = 1;', 'popup.html': '<script src="pages/popup/popup.js"></script><link href="style.css" rel="stylesheet">',
+  'pages/popup/popup.js': 'chrome.runtime.getURL("/");', 'style.css': 'body{color:black}',
+  'feature-bootstrap.js': '', 'shared/feature-scripts.js': 'export const scripts=[{js:["helper.js"]}];',
   'THIRD_PARTY_NOTICES.md': 'License notices', 'vendor/ui/components.js.LEGAL.txt': 'License',
 });
 // Store-only fixtures with a valid central directory and CRC; no external ZIP creation tool.
@@ -56,16 +56,16 @@ test('valid archive checks packaged references and preserved licenses without ex
   assert.throws(() => verifyPackage(file, '0.3.7'), /version mismatch/);
 });
 test('missing module, HTML and licensed dynamic resources each fail validation', async t => {
-  for (const name of ['helper.js', 'popup.js', 'THIRD_PARTY_NOTICES.md']) {
+  for (const name of ['helper.js', 'pages/popup/popup.js', 'THIRD_PARTY_NOTICES.md']) {
     const file = await archive(t, base().filter(([entry]) => entry !== name));
     assert.throws(() => verifyPackage(file, '0.3.6'), /Missing packaged resource/);
   }
   const file = await archive(t, base().map(([name, value]) => [name,
-    name === 'feature-scripts.js' ? 'export const scripts=[{js:["missing.js"]}];' : value]));
+    name === 'shared/feature-scripts.js' ? 'export const scripts=[{js:["missing.js"]}];' : value]));
   assert.throws(() => verifyPackage(file, '0.3.6'), /Missing packaged resource/);
 });
 test('unsafe paths, duplicate members, signing credentials, source maps and symlinks fail closed', async t => {
-  for (const extra of [['../outside.txt', 'bad'], ['popup.js', 'duplicate'], ['signing.pem', 'bad'],
+  for (const extra of [['../outside.txt', 'bad'], ['pages/popup/popup.js', 'duplicate'], ['signing.pem', 'bad'],
     ['popup.js.map', '{}'], ['.env', 'bad'], ['linked.js', '/outside/key', 0o120777]]) {
     const file = await archive(t, [...base(), extra]);
     assert.throws(() => verifyPackage(file, '0.3.6'), /Unsafe|Duplicate|Secret|Hidden|Symlinks/);

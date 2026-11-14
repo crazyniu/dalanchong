@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createLiveLogFeed} from '../browser-extension/invite-live-logs.js';
+import {createLiveLogFeed} from '../browser-extension/invitation/shared/invite-live-logs.js';
 
 test('live logs retain only latest 200 and display chronological activity', async () => {
   let visible;

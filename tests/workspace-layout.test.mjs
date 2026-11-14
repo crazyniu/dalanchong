@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const css = async file => readFile(new URL(`../browser-extension/${file}`, import.meta.url), 'utf8');
-const [manager, settings, nav] = await Promise.all(['manager.css', 'settings.css', 'workspace-nav.css'].map(css));
+const [manager, settings, nav] = await Promise.all(['pages/manager/manager.css', 'pages/settings/settings.css', 'shared/workspace-nav.css'].map(css));
 const rule = (source, selector) => source.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]+)\\}`))[1];
 const maxWidth = source => Number(source.match(/max-width:\s*(\d+)px/)[1]);
 test('standalone management shells use one width and viewport inset at desktop and narrow sizes', () => {
@@ -34,6 +34,6 @@ test('standalone management shells use one width and viewport inset at desktop a
 });
 test('brand hover suppresses global link underline without removing keyboard focus', async () => {
   assert.match(rule(nav, '.workspace-brand:hover'), /text-decoration:\s*none/);
-  assert.match(await css('theme.css'), /a:focus-visible\s*\{[^}]*outline:/);
+  assert.match(await css('shared/theme.css'), /a:focus-visible\s*\{[^}]*outline:/);
   assert.doesNotMatch(settings, /body\s*\{[^}]*font-size:/);
 });

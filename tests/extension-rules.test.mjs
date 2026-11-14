@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
-import {createInviteLicense} from '../browser-extension/invite-license.js';
+import {createInviteLicense} from '../browser-extension/invitation/background/invite-license.js';
 
 const code = 'A'.repeat(24);
 const installationId = '11111111-1111-4111-8111-111111111111';
