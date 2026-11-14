@@ -356,7 +356,15 @@ export async function openInviteStore() {
     },
     // id is the talent ID: the composite primary key provides status-independent
     // deduplication across all tasks/tabs, even under concurrent reservations.
-    reserveInvitation(scope, {talentId, taskId}) {
+    reserveInvitation(scope, {talentId, taskId, details}) {
+      const snapshot = {};
+      if (details !== undefined) {
+        if (!details || typeof details !== 'object' || Array.isArray(details)) throw new Error('记录详情无效');
+        for (const field of ['products', 'message']) {
+          if (typeof details[field] !== 'string' || details[field].length > 10000) throw new Error('记录详情字段无效');
+          snapshot[field] = details[field];
+        }
+      }
       const key = scopeKey(scope); identifier(talentId, '达人 ID'); identifier(taskId, '任务 ID');
       return transaction(db, STORES, 'readwrite', (tx, done, on) => {
         const records = tx.objectStore('invitations');
@@ -367,7 +375,7 @@ export async function openInviteStore() {
             on(tx.objectStore('talents').get([key, talentId]), talent => {
               if (!talent) throw new Error('当前账号未采集该达人');
               const now = new Date().toISOString();
-              const row = {scope: key, id: talentId, talentId, taskId, name: talent.name || '', uid: talent.uid || '', source: talent.source || '', status: 'sending',
+              const row = {...snapshot, scope: key, id: talentId, talentId, taskId, name: talent.name || '', uid: talent.uid || '', source: talent.source || '', status: 'sending',
                 createdAt: now, updatedAt: now};
               records.add(row); done({created: true, record: publicRow(row)});
             });

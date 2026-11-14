@@ -4,7 +4,7 @@ const {invitationRuntime:r,bindInvitationSession:bind}=await import('data:text/j
 const session={sessionId:'s',accountId:'a',platform:'douyin'};
 test('adapter maps worker pages without transferring entire history',async()=>{
  bind(session);globalThis.chrome={runtime:{sendMessage:async msg=>{assert.equal(msg.sessionId,'s');assert.equal(msg.type,'INVITE_QUERY');return {ok:true,data:{total:1234,page:62,rows:Array.from({length:14},(_,i)=>({id:String(1220+i),talentId:String(1220+i),createdAt:'2026-01-01',status:'success'}))}}}}};
- const page=await r.queryData({kind:'records',page:62,pageSize:20});assert.equal(page.total,1234);assert.equal(page.rows.length,14);assert.equal(page.rows[0].accountId,'a');assert.equal(page.rows[0].time,'2026-01-01');
+ const page=await r.queryData({kind:'records',page:62,pageSize:20});assert.equal(page.total,1234);assert.equal(page.rows.length,14);assert.equal(page.rows[0].accountId,'a');assert.equal(page.rows[0].time,'2026-01-01');assert.equal(page.rows[0].products,'未保存');assert.equal(page.rows[0].message,'未保存');
 });
 test('adapter rejects caller scope mismatch and late response after rebind',async()=>{
  bind(session);await assert.rejects(r.queryData({kind:'records',accountId:'other'}));

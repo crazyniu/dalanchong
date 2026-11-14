@@ -30,7 +30,7 @@ function filters(q:any) {
   return {query:q.query || '',invitationStatus:f.status || 'all',source:f.choices?.source || '',gender:gender === '男'?'male':gender === '女'?'female':gender || 'all',minFans:f.ranges?.fans?.min ?? '',maxFans:f.ranges?.fans?.max ?? ''}
 }
 function talent(row:any,s:Session):CollectedTalent { return {...row,platform:s.platform,sourceAccountId:s.accountId,name:row.name || '',source:row.source || '',collectedAt:row.collectedAt || row.updatedAt || '',gender:row.gender==='male'?'男':row.gender==='female'?'女':row.gender} }
-function record(row:any,s:Session):InviteRecord { return {...row,platform:s.platform,accountId:s.accountId,talentUid:row.uid,time:row.updatedAt || row.createdAt || '',name:row.name || '',source:row.source || '',products:row.products || '',message:row.message || '',note:row.note || ''} }
+function record(row:any,s:Session):InviteRecord { return {...row,platform:s.platform,accountId:s.accountId,talentUid:row.uid,time:row.updatedAt || row.createdAt || '',name:row.name || '',source:row.source || '',products:row.products ?? '未保存',message:row.message ?? '未保存',note:row.note || ''} }
 function page(rows:any[],q:any) {
   const size=Number.isSafeInteger(q.pageSize)&&q.pageSize>0?Math.min(q.pageSize,1000):20
   const current=Math.min(Math.max(1,Number.isSafeInteger(q.page)?q.page:1),Math.max(1,Math.ceil(rows.length/size)))

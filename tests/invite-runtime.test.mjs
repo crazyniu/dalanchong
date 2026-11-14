@@ -115,3 +115,11 @@ test('page preparation and job start share one scope recovery', async () => {
   await eventually(() => f.tasks.get('1').status === 'completed');
   assert.equal(calls, 1);
 });
+
+test('invitation reservation records the immutable user-confirmed display snapshot',async()=>{
+ const f=fixture(),input={...config};
+ await f.runtime.startInvitation(scope,f.connection,input,['1']);input.message='later edit';
+ await eventually(()=>f.records.has('1'));
+ assert.deepEqual(f.records.get('1').details,{products:'123',message:'合作邀请'});
+ f.runtime.stopAll();
+});

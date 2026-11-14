@@ -174,7 +174,7 @@ export function createInviteRuntime({store, license, onChange = () => {}}) {
         for (const id of selected) {
           await check(job);
           if (job.task.success >= (config.maxInvites ?? Infinity)) break;
-          const reserved = await store.reserveInvitation(scope, {talentId: id, taskId: job.task.id});
+          const reserved = await store.reserveInvitation(scope, {talentId: id, taskId: job.task.id, details:{products:config.products,message:config.message}});
           if (!reserved.created) { await save(job, {processed: job.task.processed + 1, skipped: job.task.skipped + 1}); continue; }
           const candidate = await store.getTalent(scope, id);
           let outcome = 'failed', dispatched = false, note = '', response;

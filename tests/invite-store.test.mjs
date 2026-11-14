@@ -46,3 +46,20 @@ test('global 10000 talent cap aborts the complete extra batch, not partial write
     assert.equal((await store.getTalent(a, 'c0')).name, 'updated at capacity');
   } finally { store.close(); }
 });
+
+test('invitation history snapshots only chosen display fields without rewriting prior records',async()=>{
+ const {IDBFactory}=await import('fake-indexeddb');globalThis.indexedDB=new IDBFactory();
+ const store=await openInviteStore(),a=scope('snapshot-a'),b=scope('snapshot-b');
+ try {
+  await store.upsertTalents(a,[{id:'snapshot',name:'A'}]);await store.upsertTalents(b,[{id:'snapshot',name:'B'}]);
+  const task=await store.createTask(a,{kind:'invite',total:1});
+  const details={products:'123',message:'Original invitation',phone:'not recorded',cookie:'not recorded',token:'not recorded'};
+  const first=await store.reserveInvitation(a,{talentId:'snapshot',taskId:task.id,details});
+  details.message='Changed form';
+  const second=await store.reserveInvitation(a,{talentId:'snapshot',taskId:task.id,details});
+  assert.equal(first.created,true);assert.equal(second.created,false);assert.equal(second.record.message,'Original invitation');assert.equal(second.record.products,'123');
+  for(const field of ['phone','cookie','token'])assert.equal(field in second.record,false);
+  assert.equal((await store.listInvitations(b)).length,0);
+  assert.throws(()=>store.reserveInvitation(a,{talentId:'snapshot',taskId:task.id,details:{products:'1',message:'x'.repeat(10001)}}),/详情字段/);
+ }finally{store.close()}
+});
