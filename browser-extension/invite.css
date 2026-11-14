@@ -1,0 +1,58 @@
+/**
+ * AI file map
+ * Purpose: responsive, neutral invitation workspace using shared tokens.
+ * Entry: invite.html loads this after theme.css; no rules affect other extension pages.
+ * Boundary: source, authorization, configuration and records have separate regions.
+ */
+.workspace { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+.page-heading, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+h1 { font-size: 24px; } h2 { font-size: 18px; }
+.stage { padding: 5px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink-3); }
+.notice { margin: 24px 0; padding: 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; }
+.columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+.panel { padding: 24px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.panel > .muted { margin-top: 10px; }
+.source-status { margin: 20px 0 12px; color: var(--ink-3); }
+.source-list { list-style: none; padding: 0; margin: 0 0 20px; max-height: 420px; overflow-y: auto; }
+.source-row { display: flex; align-items: flex-start; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.source-row input { margin-top: 4px; accent-color: var(--accent); }
+.source-copy { min-width: 0; }
+.source-copy strong, .source-copy span { display: block; overflow-wrap: anywhere; }
+.source-copy span { color: var(--ink-3); margin-top: 4px; }
+.supported { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+.supported summary { cursor: pointer; }
+.supported ul { margin-bottom: 0; padding-left: 20px; color: var(--ink-3); }
+#invite-config { margin-top: 20px; display: grid; gap: 16px; }
+#invite-config label { display: grid; gap: 8px; }
+#invite-config input, #invite-config select, #invite-config textarea { width: 100%; min-width: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; }
+#invite-config textarea { resize: vertical; }
+#invite-config :is(input, select, textarea):focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
+#invite-config .muted { margin-top: -8px; }
+.field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) { .columns { grid-template-columns: 1fr; } .workspace { padding: 20px 16px; } }
+@media (max-width: 420px) { .field-pair { grid-template-columns: 1fr; } .panel { padding: 16px; } }
+.license-panel { margin: 24px 0; }
+.license-panel > p { margin: 12px 0; }
+.license-form, .actions, .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.license-form input, .pagination select { min-height: 36px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font: inherit; }
+.license-form input { flex: 1; min-width: 160px; }
+.data-panel { margin-top: 24px; }
+.table-scroll { overflow-x: auto; margin-top: 16px; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; max-width: 360px; }
+th { color: var(--ink-3); font-weight: 500; }
+.pagination { justify-content: flex-end; margin-top: 16px; }
+#workspace-error { color: var(--danger); background: var(--danger-soft); }
+input[type="checkbox"] { accent-color: var(--accent); }
+
+.list-filters { margin: 18px 0; display: grid; gap: 12px; }
+.list-filters label { display: grid; gap: 6px; min-width: 120px; }
+.filter-fields { display: flex; flex-wrap: wrap; gap: 12px; }
+.filter-fields[hidden] { display: none; }
+.list-filters input, .list-filters select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; min-width: 0; }
+.filter-fields input { max-width: 180px; }
+.row-actions .btn { white-space: nowrap; margin: 2px; }
+.task-line { display: block; margin-bottom: 8px; overflow-wrap: anywhere; }
+
+.data-panel pre { max-width: 600px; max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+#task-history details { margin-top: 12px; }

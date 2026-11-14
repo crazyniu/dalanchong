@@ -1,0 +1,94 @@
+<!doctype html>
+<!--
+AI file map
+Purpose: standalone creator invitation workspace with explicit authorization and task controls.
+Entry: popup opens invite.html; invite.js lists tabs and owns in-memory form state.
+Boundary: background validates authorization and identity; UI never persists contact drafts.
+-->
+<html lang="zh-CN" class="wa-light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>达人邀约 · 大懒虫</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="invite.css">
+  <link rel="stylesheet" href="license-ui.css">
+</head>
+<body data-license-locked>
+  <section id="license-gate" aria-label="插件激活"><h1>激活大懒虫</h1><p role="status">正在读取授权状态…</p></section>
+  <main class="workspace">
+    <header class="page-heading"><div><p class="muted">大懒虫</p><h1>达人邀约</h1></div><span class="stage">独立插件</span></header>
+    <section class="panel license-panel" aria-labelledby="license-title">
+      <div class="section-heading"><h2 id="license-title">插件授权</h2><button id="refresh-status" class="btn outline" type="button">刷新状态</button></div>
+      <p id="license-status" role="status">正在读取授权状态…</p>
+      <form id="license-form" class="license-form" autocomplete="off">
+        <label for="activation-code">激活码</label><input id="activation-code" type="password" autocomplete="off" required>
+        <button id="activate" class="btn primary" type="submit">激活</button>
+        <button id="verify-license" class="btn outline" type="button">重新验证</button>
+      </form>
+    </section>
+    <p id="workspace-error" class="notice" role="alert" hidden></p>
+    <div class="columns">
+      <section class="panel" aria-labelledby="sources-title">
+        <header class="section-heading"><h2 id="sources-title">已打开的来源页面</h2><button id="refresh-sources" class="btn outline" type="button">刷新</button></header>
+        <p class="muted">仅显示当前浏览器中的来源页面，不代表已登录。</p>
+        <p id="source-status" role="status" class="source-status">正在读取标签页…</p>
+        <ul id="source-list" class="source-list" aria-label="来源页面"></ul>
+        <div class="actions"><button id="focus-source" class="btn outline" type="button" disabled>切到选中页面</button><button id="prepare-source" class="btn primary" type="button" disabled>准备来源</button></div>
+        <p id="observation-status" class="source-status" role="status">尚未准备来源。</p>
+        <div class="actions"><button id="collect" class="btn primary" type="button" disabled>开始采集</button><button id="stop-collect" class="btn outline" type="button" disabled>停止采集</button><button id="stop-invite" class="btn outline" type="button" disabled>停止邀约</button><button id="stop-task" class="btn outline" type="button" disabled>停止全部任务</button></div>
+        <details class="supported"><summary>支持的 7 类来源</summary><ul id="supported-sources"></ul></details>
+      </section>
+      <section class="panel" aria-labelledby="config-title">
+        <h2 id="config-title">邀约配置</h2>
+        <p class="muted">默认仅保留本页草稿。可显式按当前账号保存至本机（含联系方式）；不会自动保存，只有点击开始邀约才会发送。</p>
+        <form id="invite-config" autocomplete="off">
+          <label>平台<select id="invite-platform" name="platform"><option value="douyin">抖音</option><option value="kuaishou">快手</option></select></label>
+          <label>商品 ID<textarea required id="invite-products" name="products" rows="3" placeholder="每行一个商品 ID"></textarea></label>
+          <p id="product-hint" class="muted">抖音最多 5 个商品。</p>
+          <label>邀约话术<textarea required id="invite-message" name="message" rows="4"></textarea></label>
+          <p id="message-hint" class="muted">抖音话术不超过 150 字。</p>
+          <div id="platform-contact" class="field-pair">
+            <label>手机号<input id="invite-phone" name="phone" type="text" inputmode="tel" autocomplete="off"></label>
+            <label>微信号<input id="invite-wechat" name="wechat" type="text" autocomplete="off"></label>
+          </div>
+          <p id="contact-hint" class="muted">抖音手机号和微信号至少填写一项。</p>
+          <div class="field-pair">
+            <label>邀约间隔（毫秒）<input id="invite-interval" name="interval" type="number" min="5000" max="60000" step="1" value="5000"></label>
+            <label>最大邀约数（可选）<input id="invite-limit" name="limit" type="number" min="1" step="1" placeholder="不限制"></label>
+          </div>
+          <div class="actions"><button id="save-config" class="btn outline" type="button">保存配置至本机</button><button id="load-config" class="btn outline" type="button">读取本机配置</button></div>
+          <button id="start-invite" class="btn primary" type="submit" disabled>开始邀约（0 人）</button>
+        </form>
+      </section>
+    </div>
+    <section class="panel data-panel" aria-label="达人及邀约记录">
+      <div class="section-heading"><div class="actions"><button id="talents-tab" class="btn primary" type="button" aria-pressed="true">达人列表</button><button id="records-tab" class="btn outline" type="button" aria-pressed="false">邀约记录</button></div><button id="refresh-rows" class="btn outline" type="button">刷新列表</button></div>
+      <p id="task-status" role="status" class="source-status">暂无任务。</p>
+      <form id="list-filters" class="list-filters">
+        <label>搜索<input id="filter-query" type="search" maxlength="200" placeholder="达人名称或 ID"></label>
+        <div id="talent-filters" class="filter-fields">
+          <label>邀约记录<select id="filter-invitation"><option value="all">全部</option><option value="invited">已有记录</option><option value="uninvited">未处理</option></select></label>
+          <label>性别<select id="filter-gender"><option value="all">全部</option><option value="male">男</option><option value="female">女</option><option value="unknown">未知</option></select></label>
+          <label>最少粉丝<input id="filter-min-fans" type="number" min="0" step="1"></label><label>最多粉丝<input id="filter-max-fans" type="number" min="0" step="1"></label>
+          <label>来源包含<input id="filter-source" type="text" maxlength="200"></label>
+        </div>
+        <div id="record-filters" class="filter-fields" hidden>
+          <label>状态<select id="filter-status"><option value="all">全部</option><option value="success">成功</option><option value="failed">失败</option><option value="review">待核实</option><option value="skipped">已跳过</option><option value="sending">发送中</option></select></label>
+          <label>开始日期<input id="filter-from" type="date"></label><label>结束日期<input id="filter-to" type="date"></label>
+        </div>
+        <div class="actions"><button class="btn primary" type="submit">应用筛选</button><button id="reset-filters" class="btn outline" type="button">重置</button><button id="export-rows" class="btn outline" type="button">导出当前筛选 CSV</button></div>
+        <p class="muted">仅筛选本地数据；全选及导出最多 10000 条。修改筛选后请点击应用。</p>
+      </form>
+      <div id="selection-controls" class="actions"><label><input id="select-page" type="checkbox"> 选择本页</label><button id="select-filtered" class="btn outline" type="button">选择全部筛选结果</button><span id="selection-status">已选 0 人</span><button id="clear-selection" class="btn outline" type="button">清空选择</button><button id="delete-talents" class="btn outline" type="button" disabled>删除所选达人</button></div>
+      <div id="record-selection-controls" class="actions" hidden><button id="select-record-page" type="button" class="btn outline">选择本页记录</button><span id="record-selection-status">已选 0 条</span><button id="clear-record-selection" type="button" class="btn outline">清空选择</button><button id="delete-records" type="button" class="btn outline">清理所选记录</button><button id="delete-filtered-records" type="button" class="btn outline">清理当前筛选记录</button></div>
+      <div class="table-scroll"><table><thead id="rows-head"></thead><tbody id="rows-body"></tbody></table></div>
+      <p id="rows-status" role="status" class="source-status">请先准备来源。</p>
+      <div class="pagination"><label>每页 <select id="page-size"><option>20</option><option>50</option><option>100</option></select> 条</label><button id="previous-page" class="btn outline" type="button" disabled>上一页</button><span id="page-number">第 1 页</span><button id="next-page" class="btn outline" type="button" disabled>下一页</button></div>
+    </section>
+    <section class="panel data-panel"><div class="section-heading"><h2>本地任务记录</h2><button id="load-tasks" class="btn outline" type="button">刷新任务记录</button></div><p class="muted">当前账号最近 1000 个任务摘要，不是完整逐请求日志。</p><div id="task-history"></div></section>
+    <section class="panel data-panel"><div class="section-heading"><h2>本地事件日志</h2><div class="actions"><button id="refresh-logs" class="btn outline" type="button">刷新日志</button><button id="export-logs" class="btn outline" type="button">导出日志 CSV</button><button id="clear-logs" class="btn outline" type="button">清理日志</button></div></div><p class="muted">当前账号的持久脱敏事件，按页读取；不会向平台发送请求。</p><div id="event-logs"></div><div class="pagination"><button id="previous-logs" class="btn outline" type="button">上一页</button><span id="logs-page">第 1 页</span><button id="next-logs" class="btn outline" type="button">下一页</button></div></section>
+  </main>
+  <script type="module" src="invite.js"></script>
+</body>
+</html>

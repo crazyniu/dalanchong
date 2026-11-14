@@ -1,0 +1,35 @@
+/**
+ * AI file map
+ * Purpose: compact captured-video popup layout.
+ * Entry: popup.html loads after theme.css; popup.js owns list and selection state.
+ * Boundary: webpage previews do not resize or replace the popup list. The list
+ * scrolls within Chrome's popup height while the batch download footer stays visible.
+ * Shared theme tokens own controls and colors.
+ */
+body { display: flex; flex-direction: column; width: 480px; max-height: 580px; background: var(--surface); }
+.bar, .list-head, .batch-actions, .library-status, .empty { flex-shrink: 0; }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; }
+.list-head { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 16px 12px; }
+#selection-count { margin-left: auto; }
+.media-list { min-height: 0; max-height: 408px; overflow-y: auto; border-top: 1px solid var(--line); }
+.media-list:empty { display: none; }
+.item { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 8px 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.item:last-child { border-bottom: 0; }
+.item[data-selected="true"] { background: var(--accent-soft); }
+.item > wa-checkbox { margin-top: 3px; }
+.item-text { min-width: 0; }
+.item-title { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-weight: 500; overflow-wrap: anywhere; }
+.item-source { display: block; margin-top: 2px; color: var(--ink-3); }
+.item-tools { display: flex; grid-column: 2; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.item-meta { min-width: 0; flex: 1; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.quality-select { width: 100%; --wa-form-control-height: 32px; }
+.item-actions { display: flex; align-items: center; gap: 4px; }
+.item-actions .btn.icon, .item-actions .dl { width: 32px; min-height: 32px; padding: 0; }
+.library-status, .empty { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 132px; padding: 20px 16px; color: var(--ink-3); }
+.empty { flex-direction: column; }
+.empty > wa-icon { font-size: 28px; }
+.library-status > wa-spinner { font-size: 20px; }
+.batch-actions { padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.batch-actions .btn { width: 100%; }
+.toast { bottom: 12px; }
+body:has(.batch-actions:not([hidden])) .toast { bottom: 72px; }

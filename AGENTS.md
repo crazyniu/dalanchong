@@ -24,7 +24,8 @@
 
 ```sh
 pnpm install --frozen-lockfile
-node --test tests/*.test.mjs
+pnpm check
+pnpm test
 pnpm package:extension --zip-only
 ```
 

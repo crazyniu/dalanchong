@@ -1,0 +1,18 @@
+/**
+ * AI file map
+ * Purpose: hide every business component until an authoritative license check passes.
+ * Entry: every extension-owned page loads after its existing presentation styles.
+ * Boundary: HTML begins locked; JavaScript cannot flash the previous functional UI.
+ */
+body[data-license-locked] > :not(#license-gate) { display: none !important; }
+body[data-license-locked] { display: block; overflow: auto; background: var(--bg); }
+#license-gate { max-width: 480px; margin: 32px auto; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); }
+#license-gate h1 { font-size: 22px; margin-bottom: 16px; text-align: center; }
+#license-gate p { margin: 12px 0; overflow-wrap: anywhere; }
+#license-gate form { display: grid; gap: 10px; margin-top: 20px; }
+#license-gate input { width: 100%; min-height: 36px; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.license-gate-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+#license-gate .btn { flex: 1; }
+@media (max-width: 520px) { #license-gate { margin: 16px; padding: 20px; } }
+
+.license-ready-hint { margin: 10px 16px; color: var(--muted, #666); font-size: 12px; line-height: 1.5; }

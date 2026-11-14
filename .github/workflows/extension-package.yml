@@ -1,0 +1,30 @@
+# Package the extension without signing credentials; no release or account interaction.
+name: Browser Extension Package
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm package:extension --zip-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-extension-preview
+          path: dist-release/browser-extension/
+          if-no-files-found: error
