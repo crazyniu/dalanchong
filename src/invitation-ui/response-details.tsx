@@ -24,7 +24,7 @@ export function ResponseDetails({
   const bodyText = useMemo(() => formatResponseBody(response.body), [response.body])
 
   async function copyResponse() {
-    const lines = [`接口：${response.path}`]
+    const lines = response.path ? [`接口：${response.path}`] : []
     if (response.method) lines.push(`请求方法：${response.method}`)
     if (response.status !== undefined) lines.push(`HTTP 状态：${response.status}`)
     if (response.code !== undefined) lines.push(`返回码：${response.code}`)
@@ -44,7 +44,7 @@ export function ResponseDetails({
       <div className='flex items-start gap-3'>
         <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
           {response.method && <Badge variant='outline'>{response.method}</Badge>}
-          <code className='min-w-0 break-all'>{response.path}</code>
+          {response.path && <code className='min-w-0 break-all'>{response.path}</code>}
           {response.status !== undefined && (
             <Badge variant='secondary'>HTTP {response.status}</Badge>
           )}

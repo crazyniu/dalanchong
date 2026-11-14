@@ -30,7 +30,15 @@ function filters(q:any) {
   return {query:q.query || '',invitationStatus:f.status || 'all',source:f.choices?.source || '',gender:gender === '男'?'male':gender === '女'?'female':gender || 'all',minFans:f.ranges?.fans?.min ?? '',maxFans:f.ranges?.fans?.max ?? ''}
 }
 function talent(row:any,s:Session):CollectedTalent { return {...row,platform:s.platform,sourceAccountId:s.accountId,name:row.name || '',source:row.source || '',collectedAt:row.collectedAt || row.updatedAt || '',gender:row.gender==='male'?'男':row.gender==='female'?'女':row.gender} }
-function record(row:any,s:Session):InviteRecord { return {...row,platform:s.platform,accountId:s.accountId,talentUid:row.uid,time:row.updatedAt || row.createdAt || '',name:row.name || '',source:row.source || '',products:row.products ?? '未保存',message:row.message ?? '未保存',note:row.note || ''} }
+function storedResponse(value:unknown) {
+  if(typeof value !== 'string') return value
+  try {
+    const parsed=JSON.parse(value)
+    if(parsed && typeof parsed==='object' && !Array.isArray(parsed) && typeof parsed.path==='string' && 'body' in parsed) return parsed
+  } catch { /* A truncated response remains readable exactly as stored. */ }
+  return {path:'',body:value}
+}
+function record(row:any,s:Session):InviteRecord { return {...row,platform:s.platform,accountId:s.accountId,talentUid:row.uid,time:row.updatedAt || row.createdAt || '',...(row.response!==undefined?{response:storedResponse(row.response)}:{}),name:row.name || '',source:row.source || '',products:row.products ?? '未保存',message:row.message ?? '未保存',note:row.note || ''} }
 function page(rows:any[],q:any) {
   const size=Number.isSafeInteger(q.pageSize)&&q.pageSize>0?Math.min(q.pageSize,1000):20
   const current=Math.min(Math.max(1,Number.isSafeInteger(q.page)?q.page:1),Math.max(1,Math.ceil(rows.length/size)))
@@ -92,7 +100,18 @@ export const invitationRuntime = {
     const token=snapshot(q)
     const ids=q.kind==='logs' ? (await errorLogs(token)).map(row=>row.id) : q.ids || (await exported(token,q.kind==='records'?q:{kind:'talents'})).map(row=>row.id)
     if(!ids.length) return
-    await send(token,q.kind==='logs'?'INVITE_DELETE_LOGS':q.kind==='records'?'INVITE_DELETE_RECORDS':'INVITE_DELETE_TALENTS',{ids})
+    const type=q.kind==='logs'?'INVITE_DELETE_LOGS':q.kind==='records'?'INVITE_DELETE_RECORDS':'INVITE_DELETE_TALENTS'
+    let deleted=0
+    for(let offset=0;offset<ids.length;offset+=10000) {
+      try {
+        const result=await send(token,type,{ids:ids.slice(offset,offset+10000)})
+        if(!Number.isSafeInteger(result.deleted)||result.deleted<0)throw Error('删除结果无效')
+        deleted+=result.deleted
+      } catch(error) {
+        throw Error(`已确认清理 ${deleted} 条；其余结果未确认，请刷新列表核对。${error instanceof Error?error.message:String(error)}`)
+      }
+    }
+    return {deleted}
   },
   async start(accountId:string,config:InviteConfig,ids:string[]) { const token=snapshot({accountId});await send(token,'INVITE_CONFIG_SAVE',{config});return send(token,'INVITE_SEND',{config,ids}) },
   async stop(accountId:string,kind:'collect'|'invite') { return send(snapshot({accountId}),'INVITE_STOP',{kind}) },

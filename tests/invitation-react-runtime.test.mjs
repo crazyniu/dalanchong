@@ -17,11 +17,11 @@ test('selected invitation ids intersect backend historical exclusion; negative r
  await r.resolveRecord('b',false);assert.equal(last.result,'not-sent');
 });
 test('delete all talents enumerates current account without applying current filters',async()=>{
- bind(session);const calls=[];globalThis.chrome={runtime:{sendMessage:async msg=>{calls.push(msg);return {ok:true,rows:[{id:'x'}]}}}};
+ bind(session);const calls=[];globalThis.chrome={runtime:{sendMessage:async msg=>{calls.push(msg);return {ok:true,deleted:1,rows:[{id:'x'}]}}}};
  await r.deleteData({kind:'talents',query:'filter'});assert.equal(calls[0].filters.query,'');assert.deepEqual(calls[1].ids,['x']);assert.equal(calls[1].type,'INVITE_DELETE_TALENTS');
 });
 test('error log deletion retains ordinary events and sends only scoped failed ids',async()=>{
- bind(session);const calls=[];globalThis.chrome={runtime:{sendMessage:async msg=>{calls.push(msg);return {ok:true,rows:[{id:'error',status:'failed'},{id:'ordinary',status:'running'}]}}}};
+ bind(session);const calls=[];globalThis.chrome={runtime:{sendMessage:async msg=>{calls.push(msg);return {ok:true,deleted:1,rows:[{id:'error',status:'failed'},{id:'ordinary',status:'running'}]}}}};
  await r.deleteData({kind:'logs'});assert.equal(calls[1].type,'INVITE_DELETE_LOGS');assert.deepEqual(calls[1].ids,['error']);assert.equal(calls[1].sessionId,'s');
 });
 test('start saves config then sends, and rebind while saving prevents send',async()=>{
@@ -34,4 +34,30 @@ test('unselected invitation uses exact current filters plus historical exclusion
  await r.queryData({kind:'invite_ids',query:'match',filters:{status:'success'}});
  assert.equal(last.excludeInvited,true);assert.equal(last.filters.query,'match');
  assert.equal(last.filters.invitationStatus,'success');
+});
+test('persisted complete and truncated response strings are preserved as readable bodies',async()=>{
+ bind(session);
+ for(const body of ['{"status":400,"body":"bad"}','{"truncated":','plain error']){
+ globalThis.chrome={runtime:{sendMessage:async()=>({ok:true,data:{record:{id:'x',response:body}}})}};
+ const record=await r.queryData({kind:'record',id:'x'});assert.equal(record.response.body,body);assert.equal(record.response.path,'');
+ }
+});
+test('history deletion batches over 10000 and reports partial failure without retrying',async()=>{
+ bind(session);const calls=[];globalThis.chrome={runtime:{sendMessage:async msg=>{
+ if(msg.type==='INVITE_EXPORT')return {ok:true,rows:Array.from({length:10005},(_,i)=>({id:String(i)}))};calls.push(msg);
+ return calls.length===1?{ok:true,deleted:10000}:{ok:false,error:'请先停止任务'};
+ }}};
+ await assert.rejects(r.deleteData({kind:'records'}),/已确认清理 10000 条.*请先停止任务/);
+ assert.deepEqual(calls.map(c=>c.ids.length),[10000,5]);assert.ok(calls.every(c=>c.sessionId==='s'));
+});
+test('rebind after first deletion prevents any second batch',async()=>{
+ bind(session);let deletes=0;globalThis.chrome={runtime:{sendMessage:async msg=>{
+ if(msg.type==='INVITE_EXPORT')return {ok:true,rows:Array.from({length:10005},(_,i)=>({id:String(i)}))};deletes++;bind({...session,accountId:'other'});return {ok:true,deleted:10000};
+ }}};
+ await assert.rejects(r.deleteData({kind:'records'}),/账号已改变/);assert.equal(deletes,1);
+});
+
+test('complete diagnostic envelopes keep actual metadata for object and serialized storage',async()=>{
+ bind(session);const envelope={path:'/actual/api',method:'POST',status:400,body:{code:1,message:'error'}};
+ for(const response of [envelope,JSON.stringify(envelope)]){globalThis.chrome={runtime:{sendMessage:async()=>({ok:true,data:{record:{id:'x',response}}})}};const row=await r.queryData({kind:'record',id:'x'});assert.deepEqual(row.response,envelope)}
 });

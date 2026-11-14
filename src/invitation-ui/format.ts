@@ -2,7 +2,7 @@
 
 export async function exportRecords(rows: object[], filename: string) {
   if (!rows.length) return false
-  const cols = Object.keys(rows[0])
+  const cols = [...new Set(rows.flatMap(row => Object.keys(row)))]
   const cell = (v: unknown) => {
     const value = String(v ?? '')
     return '"' + (/^[=+@\-\t\r]/.test(value) ? "'" + value : value).replace(/"/g, '""') + '"'
