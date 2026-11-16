@@ -97,7 +97,7 @@ export function CollectionToolbar({
         </TabsList>
       </Tabs>
       {state.view === 'collect' && (
-        <div className='ml-auto flex min-w-0 items-center gap-2'>
+        <div className='flex min-w-0 items-center gap-2'>
           {state.pendingInvite ? (
             <Button
               size='sm'
@@ -131,11 +131,7 @@ export function CollectionToolbar({
       <Button
         variant='ghost'
         size='sm'
-        className={
-          state.view === 'list'
-            ? 'ml-auto text-muted-foreground'
-            : 'text-muted-foreground'
-        }
+        className='text-muted-foreground'
         onClick={() => onAction({ type: 'logs' })}
         aria-label='错误日志'
         title='错误日志'
