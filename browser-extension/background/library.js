@@ -7,8 +7,7 @@
  * State: media writes and queue passes are serialized independently. Each free download
  * slot prepares its next file independently without blocking later queue passes;
  * preparation reserves that slot until it fails or starts a transfer. Session records
- * restore queued/fetching jobs only after authorization; existing download IDs are reused.
- * Revocation cancels owned transfers/preparations and preserves canceled history without restart.
+ * restore queued/fetching jobs whenever the worker wakes; existing download IDs are reused.
  * Invariants: only complete verified videos enter the queue. A post-save queue pass
  * catches completion events that raced the download ID write. A one-second progress
  * timer runs only while preparation or transfers occupy slots; terminal events advance the queue.
@@ -17,21 +16,16 @@
 import {platformName, normalizeMediaURL, fileName, probeMediaFile} from '../shared/media.js';
 import {canCaptureSource, mediaIdentity, mediaTabIds, uniqueMedia, videoGroupKey} from '../shared/media-records.js';
 import {listenMessages} from './messages.js';
-import {rankVideoFormats} from './video-rule-client.js';
-import {initializeLicense, requireLicense, licenseStatus, licenseEpoch, onLicenseChange} from './license-background.js';
 
 let writes = Promise.resolve();
 let queueWork = Promise.resolve();
 let progressTimer;
 const DOWNLOAD_CONCURRENCY = 6;
 const preparing = new Set();
-const preparations = new Map();
 const keyFor = id => `media:${id}`;
 
 export function addMedia(item) {
-  const epoch = licenseEpoch();
   const write = writes.then(async () => {
-    requireLicense(epoch);
     const url = normalizeMediaURL(item.url);
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(mediaIdentity(url)));
     const id = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -48,7 +42,6 @@ export function addMedia(item) {
     const sourceTabIds = [...new Set([...(previous ? mediaTabIds(previous) : []), ...mediaTabIds(item)])];
     const record = {...metadata, id, url, sourceTabIds, platform: platformName(metadata.sourceUrl),
       createdAt: previous?.createdAt || Date.now(), updatedAt: Date.now()};
-    requireLicense(epoch);
     await chrome.storage.session.set({[key]: record});
     return record;
   });
@@ -59,16 +52,13 @@ export function addMedia(item) {
 }
 
 export async function queueDownloads(items) {
-  const epoch = licenseEpoch(); requireLicense(epoch);
   await writes;
-  requireLicense(epoch);
   if (items.some(item => !canCaptureSource(item.sourceUrl) || !item.mediaVerified ||
       item.kind !== 'video' || !/^https?:/.test(item.url)))
     throw new Error('部分地址尚未确认是视频，请重新解析后再下载。');
   const jobs = items.map(item => ({...item, id: crypto.randomUUID(), mediaId: item.id,
     createdAt: Date.now(), received: 0, status: 'queued',
     filename: fileName(item.title, item.quality === '原片候选' ? '原片' : item.quality || '视频', item.contentType)}));
-  requireLicense(epoch);
   await chrome.storage.session.set(Object.fromEntries(jobs.map(job => [`job:${job.id}`, job])));
   void scheduleQueue();
   return jobs.map(job => job.id);
@@ -94,8 +84,6 @@ async function syncDownload(job) {
 
 async function runQueue() {
   clearTimeout(progressTimer);
-  if (!licenseStatus().valid) return;
-  const epoch = licenseEpoch();
   // Snapshot reservations before storage or progress awaits. A preparation may
   // finish during those awaits, but this pass must not restart its queued snapshot.
   const occupied = new Set(preparing);
@@ -106,7 +94,6 @@ async function runQueue() {
   const current = await Promise.all(jobs.map(job => job.downloadId === undefined ? job : syncDownload(job)));
   for (const job of current) if (job.downloadId !== undefined && job.status === 'fetching') occupied.add(job.id);
   const queued = current.filter(job => job.downloadId === undefined && !occupied.has(job.id));
-  requireLicense(epoch);
   for (const job of queued.slice(0, Math.max(0, DOWNLOAD_CONCURRENCY - occupied.size))) {
     preparing.add(job.id);
     occupied.add(job.id);
@@ -116,27 +103,17 @@ async function runQueue() {
 }
 
 async function startDownload(job) {
-  const epoch = licenseEpoch(), controller = new AbortController();
-  preparations.set(job.id, controller);
-  let downloadId;
   try {
-    requireLicense(epoch);
-    const media = await probeMediaFile(job.url, {trustedVideo: true, signal: controller.signal});
-    requireLicense(epoch);
+    const media = await probeMediaFile(job.url, {trustedVideo: true});
     if (media.kind !== 'video') throw new Error('下载地址未返回完整视频文件，请重新解析。');
-    downloadId = await chrome.downloads.download({url: media.url, filename: job.filename,
+    const downloadId = await chrome.downloads.download({url: media.url, filename: job.filename,
       saveAs: false, conflictAction: 'uniquify'});
-    requireLicense(epoch);
     await saveJob({...job, url: media.url, downloadId, status: 'fetching'});
   } catch (error) {
-    if (downloadId !== undefined) await chrome.downloads.cancel(downloadId).catch(() => {});
-    const revoked = controller.signal.aborted || epoch !== licenseEpoch() || !licenseStatus().valid;
-    await saveJob({...job, ...(downloadId !== undefined ? {downloadId} : {}),
-      status: revoked ? 'canceled' : 'error', error: revoked ? '授权失效，下载已停止，请重新开始' : error.message});
+    await saveJob({...job, status: 'error', error: error.message});
   } finally {
     // Saving precedes release. The next pass also checks small files that finished
     // before onChanged could associate their Chrome ID with the saved job.
-    preparations.delete(job.id);
     preparing.delete(job.id);
     void scheduleQueue();
   }
@@ -153,7 +130,7 @@ async function readLibrary() {
   const stored = await chrome.storage.session.get(null);
   const records = Object.entries(stored).filter(([key, item]) => key.startsWith('media:') &&
     canCaptureSource(item.sourceUrl) && item.kind === 'video' && item.mediaVerified).map(([, item]) => item);
-  return {schemaVersion: 2, items: await rankVideoFormats(uniqueMedia(records)),
+  return {schemaVersion: 2, items: uniqueMedia(records),
     jobs: Object.entries(stored).filter(([key]) => key.startsWith('job:')).map(([, job]) => job)};
 }
 
@@ -199,32 +176,10 @@ listenMessages(types, (message, sender, respond) => {
 chrome.downloads.onChanged.addListener(delta => {
   if (delta.state && ['complete', 'interrupted'].includes(delta.state.current)) void scheduleQueue();
 });
-void initializeLicense().then(() => scheduleQueue()).catch(() => {});
-
-onLicenseChange(state => {
-  if (state.valid) return;
-  clearTimeout(progressTimer);
-  for (const controller of preparations.values()) controller.abort();
-  const stop = queueWork.then(async () => {
-    const stored = await chrome.storage.session.get(null);
-    for (const [key, job] of Object.entries(stored)) {
-      if (!key.startsWith('job:') || !['queued', 'fetching'].includes(job.status)) continue;
-      if (job.downloadId !== undefined) await chrome.downloads.cancel(job.downloadId).catch(() => {});
-      await saveJob({...job, status: 'canceled', error: '授权失效，下载已停止，请重新开始'});
-    }
-    await chrome.action.setBadgeText({text: ''});
-  });
-  queueWork = stop.catch(() => {});
-  return stop;
-});
+void scheduleQueue();
 
 async function updateBadge() {
-  if (!licenseStatus().valid) { await chrome.action.setBadgeText({text: ''}); return; }
-  await writes;
-  const stored = await chrome.storage.session.get(null);
-  if (!licenseStatus().valid) { await chrome.action.setBadgeText({text: ''}); return; }
-  const items = Object.entries(stored).filter(([key, item]) => key.startsWith('media:') &&
-    canCaptureSource(item.sourceUrl) && item.kind === 'video' && item.mediaVerified).map(([, item]) => item);
+  const {items} = await readLibrary();
   const count = new Set(items.map(videoGroupKey)).size;
   await chrome.action.setBadgeText({text: count ? (count > 999 ? '999+' : String(count)) : ''});
 }

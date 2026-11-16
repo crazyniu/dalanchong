@@ -1,6 +1,6 @@
 
 (() => {
-  const scope = globalThis.__dlcFeatureGate?.begin('detail-page');
+  const scope = globalThis.__dlcPageScopes?.begin('detail-page');
   if (!scope) return;
   const {setTimeout, setInterval, MutationObserver} = scope;
   const priorFetch = window.fetch, priorOpen = XMLHttpRequest.prototype.open, priorSend = XMLHttpRequest.prototype.send;
@@ -13,7 +13,7 @@
 /**
  * AI module map
  * Purpose: MAIN-world Kuaishou work-format and current-player source reader.
- * Entry: licensed injection exposes __dalanchongDetail.read to background.js script execution.
+ * Entry: Manifest content-script injection exposes __dalanchongDetail.read to background.js script execution.
  * Flow: observed site JSON and bootstrap objects populate a bounded work cache; requested quality selects a current-work video address.
  * State: the document owns its most recent 30 work objects; fetch/XHR wrappers preserve original site responses.
  * Boundary: no extension APIs, storage or downloads here; ambiguous current formats fail instead of changing quality.

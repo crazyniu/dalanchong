@@ -21,7 +21,7 @@ test('dry run supports both architectures and space-containing project paths wit
  for(const arch of ['arm64','x86_64']){const f=await fixture(t,{arch});const r=f.run(['--dry-run']);assert.equal(r.status,0,r.stderr);assert.ok(r.stdout.includes(f.root));assert.match(r.stdout,/11\.15\.1/);await assert.rejects(readFile(path.join(f.root,'calls')));}
 });
 test('existing compatible Node uses local pnpm prefix and frozen install',async t=>{
- const f=await fixture(t);const r=f.run();assert.equal(r.status,0,r.stderr);const calls=await readFile(path.join(f.root,'calls'),'utf8');assert.match(calls,/pnpm@11\.15\.1/);assert.match(calls,/--frozen-lockfile/);assert.match(calls,/build:ui/);assert.ok(calls.includes(path.join(f.root,'.tools/pnpm')));assert.doesNotMatch(calls,/UNEXPECTED_TAR|--global/);const paths=(await readFile(path.join(f.root,'paths'),'utf8')).trim().split('\n');assert.ok(paths.at(-1).startsWith(path.join(f.root,'.tools/pnpm/node_modules/.bin')+':')); 
+ const f=await fixture(t);const r=f.run();assert.equal(r.status,0,r.stderr);const calls=await readFile(path.join(f.root,'calls'),'utf8');assert.match(calls,/pnpm@11\.15\.1/);assert.match(calls,/--frozen-lockfile/);assert.ok(calls.includes(path.join(f.root,'.tools/pnpm')));assert.doesNotMatch(calls,/UNEXPECTED_TAR|--global/);const paths=(await readFile(path.join(f.root,'paths'),'utf8')).trim().split('\n');assert.ok(paths.at(-1).startsWith(path.join(f.root,'.tools/pnpm/node_modules/.bin')+':')); 
 });
 test('unsupported OS, architecture and arguments stop immediately',async t=>{
  for(const options of [{platform:'Linux'},{arch:'sparc'}]){const f=await fixture(t,options);assert.notEqual(f.run().status,0)}

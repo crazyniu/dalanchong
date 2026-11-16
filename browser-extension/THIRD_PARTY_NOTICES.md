@@ -22,9 +22,3 @@ https://github.com/jiji262/douyin-downloader
 Web Awesome 源包的组件 chunk 标识与现有捆绑声明核对；依赖按这些 chunk 的导入追溯。捆绑代码原有版权注释和 `.LEGAL.txt` 不移除。
 
 项目来源代码携带的 MIT 声明保留于 [project-source-MIT.txt](licenses/project-source-MIT.txt)。
-
-## 达人工作区界面
-
-`invitation-ui.js` 使用 React、Radix UI 等组件，并内嵌 Tailwind CSS 样式。构建保留代码许可注释，并按实际捆绑依赖生成完整许可汇总 [invitation-ui-LICENSES.txt](licenses/invitation-ui-LICENSES.txt)；构建工具本身不作为运行组件分发。平台标识仅用于标明对应来源，商标权归各自权利人。
-
-`react-remove-scroll-bar@2.3.8` 的发布包遗漏完整 LICENSE，仅标记 MIT；构建汇总包含官方上游仓库当前 LICENSE 正文，离线副本见源码 `src/legal/react-remove-scroll-bar-LICENSE.txt`。

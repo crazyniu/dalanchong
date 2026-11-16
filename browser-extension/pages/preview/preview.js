@@ -8,10 +8,6 @@
  */
 import '../../vendor/ui/components.js';
 import {createPlayer} from './player.js';
-import {requirePageLicense} from '../../shared/license-ui.js';
-
-await requirePageLicense();
-
 const params = new URL(location.href).searchParams;
 const notify = (type, details = {}) => parent.postMessage({
   type, previewId: params.get('preview'), ...details

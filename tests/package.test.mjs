@@ -8,13 +8,13 @@ import {crc32} from 'node:zlib';
 import {validateVersion, validateVersions, verifyPackage} from '../scripts/verify-package.mjs';
 
 const manifest = {manifest_version: 3, version: '0.3.6', background: {service_worker: 'background.js'},
-  action: {default_popup: 'popup.html'}, content_scripts: [{js: ['feature-bootstrap.js']}], icons: {},
+  action: {default_popup: 'popup.html'}, content_scripts: [{js: ['content/page-scope.js', 'content/capture.js']}], icons: {},
   web_accessible_resources: [{resources: ['popup.html']}]};
 const base = () => Object.entries({
   'manifest.json': JSON.stringify(manifest), 'background.js': 'import "./helper.js";',
   'helper.js': 'export const value = 1;', 'popup.html': '<script src="pages/popup/popup.js"></script><link href="style.css" rel="stylesheet">',
   'pages/popup/popup.js': 'chrome.runtime.getURL("/");', 'style.css': 'body{color:black}',
-  'feature-bootstrap.js': '', 'shared/feature-scripts.js': 'export const scripts=[{js:["helper.js"]}];',
+  'content/page-scope.js': '', 'content/capture.js': '',
   'THIRD_PARTY_NOTICES.md': 'License notices', 'vendor/ui/components.js.LEGAL.txt': 'License',
 });
 // Store-only fixtures with a valid central directory and CRC; no external ZIP creation tool.
@@ -55,13 +55,13 @@ test('valid archive checks packaged references and preserved licenses without ex
   assert.deepEqual(verifyPackage(file, '0.3.6'), {version: '0.3.6', files: 10});
   assert.throws(() => verifyPackage(file, '0.3.7'), /version mismatch/);
 });
-test('missing module, HTML and licensed dynamic resources each fail validation', async t => {
+test('missing module, HTML and declared runtime resources each fail validation', async t => {
   for (const name of ['helper.js', 'pages/popup/popup.js', 'THIRD_PARTY_NOTICES.md']) {
     const file = await archive(t, base().filter(([entry]) => entry !== name));
     assert.throws(() => verifyPackage(file, '0.3.6'), /Missing packaged resource/);
   }
   const file = await archive(t, base().map(([name, value]) => [name,
-    name === 'shared/feature-scripts.js' ? 'export const scripts=[{js:["missing.js"]}];' : value]));
+    name === 'manifest.json' ? JSON.stringify({...manifest, content_scripts:[{js:['missing.js']}]}) : value]));
   assert.throws(() => verifyPackage(file, '0.3.6'), /Missing packaged resource/);
 });
 test('unsafe paths, duplicate members, signing credentials, source maps and symlinks fail closed', async t => {

@@ -10,44 +10,13 @@
 import './commerce-background.js';
 import './capture-background.js';
 import './preview-background.js';
-import '../invitation/background/invite-background.js';
-import '../invitation/background/invite-return-background.js';
 import {initializeContextMenus} from './context-menu-background.js';
 void initializeContextMenus().catch(error => console.error('快捷菜单初始化失败', error.message));
-import {initializeFeatureInjection} from './injection-gate-background.js';
-void initializeFeatureInjection().catch(error => console.error('网页工具初始化失败', error.message));
 import {addMedia, queueDownloads} from './library.js';
 import {videoPage, detailPageURL} from '../shared/platforms.js';
 import {probeMediaFile} from '../shared/media.js';
 import {resolveVideoURL} from '../shared/resolve.js';
 import {listenMessages} from './messages.js';
-import {requireLicense, licenseEpoch, licenseStatus, onLicenseChange} from './license-background.js';
-
-const activeOperations = new Set();
-function beginOperation() {
-  requireLicense();
-  const operation = {epoch: licenseEpoch(), controller: new AbortController()};
-  activeOperations.add(operation);
-  return operation;
-}
-function guard(operation) {
-  requireLicense(operation.epoch);
-  operation.controller.signal.throwIfAborted();
-}
-function finishOperation(operation) { activeOperations.delete(operation); }
-onLicenseChange(license => {
-  if (license.valid) return;
-  for (const operation of activeOperations) operation.controller.abort();
-  for (const [tabId, pending] of pendingProbes) {
-    pending.reject(new Error('授权已失效，解析已停止。'));
-    // Cleanup is allowed after revocation and never starts a platform request.
-    void chrome.scripting.executeScript({target: {tabId}, world: 'MAIN',
-      func: () => window.__douyinOriginal?.stopProbe()}).catch(() => {});
-  }
-  detailMedia.clear();
-  pendingMediaDiagnostics.clear();
-  mediaRequestDiagnostics.clear();
-});
 
 const pendingProbes = new Map();
 const originalProbeQueues = new Map();
@@ -79,7 +48,6 @@ function sourceDiagnostic(source) {
 // fetch rejection can run before onErrorOccurred, after the URL subscription ends.
 const mediaRequestFilter = {urls: ['http://*/*', 'https://*/*']};
 chrome.webRequest.onBeforeRequest.addListener(details => {
-  if (!licenseStatus().valid) return;
   if (details.tabId !== -1 || details.initiator !== chrome.runtime.getURL('').slice(0, -1)) return;
   const pending = pendingMediaDiagnostics.get(details.url);
   if (pending) mediaRequestDiagnostics.set(details.requestId, {url: details.url, subscribers: new Set(pending)});
@@ -96,7 +64,7 @@ chrome.webRequest.onBeforeRedirect.addListener(details => {
 chrome.webRequest.onErrorOccurred.addListener(details => {
   const tracked = mediaRequestDiagnostics.get(details.requestId);
   mediaRequestDiagnostics.delete(details.requestId);
-  if (!licenseStatus().valid || !tracked || details.error === 'net::ERR_ABORTED') return;
+  if (!tracked || details.error === 'net::ERR_ABORTED') return;
   for (const {diagnostic, cdn, originalAttempt} of tracked.subscribers) {
     Object.assign(cdn, {origin: mediaOrigin(details.url), networkError: details.error});
     for (const request of diagnostic.requests || []) {
@@ -133,28 +101,24 @@ chrome.webRequest.onBeforeRedirect.addListener(details => {
   pending.resolve({url: details.redirectUrl, playUrl: details.url});
 }, {urls: ["https://www.douyin.com/aweme/v1/play/*"]});
 
-async function inPage(operation, tabId, func, args = []) {
-  guard(operation);
+async function inPage(tabId, func, args = []) {
   const [execution] = await chrome.scripting.executeScript({target: {tabId}, world: "MAIN", func, args});
-  guard(operation);
   if (execution.result?.error) throw new Error(execution.result.error);
   return execution.result;
 }
 
-function probeOriginal(operation, tabId, detail, diagnostic) {
-  guard(operation);
+function probeOriginal(tabId, detail, diagnostic) {
   // Detail metadata and batch parsing share one page-side probe slot. Finish its
   // cleanup before the next request can install a redirect observer for this tab.
   const previous = originalProbeQueues.get(tabId) || Promise.resolve();
-  const probe = previous.catch(() => {}).then(() => runOriginalProbe(operation, tabId, detail, diagnostic));
+  const probe = previous.catch(() => {}).then(() => runOriginalProbe(tabId, detail, diagnostic));
   originalProbeQueues.set(tabId, probe);
   return probe.finally(() => {
     if (originalProbeQueues.get(tabId) === probe) originalProbeQueues.delete(tabId);
   });
 }
 
-async function runOriginalProbe(operation, tabId, detail, diagnostic) {
-  guard(operation);
+async function runOriginalProbe(tabId, detail, diagnostic) {
   let timer;
   const redirect = new Promise((resolve, reject) => {
     pendingProbes.set(tabId, {videoId: detail.videoId, resolve, reject, diagnostic});
@@ -164,23 +128,19 @@ async function runOriginalProbe(operation, tabId, detail, diagnostic) {
   redirect.catch(() => {});
   try {
     markDiagnostic(diagnostic, 'original_probe_start', {videoId: detail.videoId});
-    await inPage(operation, tabId, (videoId, needCookie) => {
+    await inPage(tabId, (videoId, needCookie) => {
       window.__douyinOriginal.startProbe(videoId, needCookie);
     }, [detail.videoId, detail.needCookie]);
     if (diagnostic?.stage === 'original_probe_start') markDiagnostic(diagnostic, 'original_probe_redirect');
-    const address = await redirect;
-    guard(operation);
-    return address;
+    return await redirect;
   } finally {
     clearTimeout(timer);
     pendingProbes.delete(tabId);
-    await chrome.scripting.executeScript({target: {tabId}, world: 'MAIN',
-      func: () => window.__douyinOriginal?.stopProbe()}).catch(() => {});
+    await inPage(tabId, () => window.__douyinOriginal.stopProbe()).catch(() => {});
   }
 }
 
-async function inspectMedia(operation, url, {credentials = 'omit', cache = 'default', diagnostic} = {}) {
-  guard(operation);
+async function inspectMedia(url, {credentials = 'omit', cache = 'default', diagnostic} = {}) {
   // Platform CDN responses may use octet-stream. The shared probe checks MP4
   // bytes instead of rejecting a complete video solely on its MIME label.
   markDiagnostic(diagnostic, 'cdn_request', {cdn: {origin: mediaOrigin(url)}});
@@ -194,8 +154,7 @@ async function inspectMedia(operation, url, {credentials = 'omit', cache = 'defa
     }
   }
   try {
-    const media = await probeMediaFile(url, {trustedVideo: true, credentials, cache, signal: operation.controller.signal});
-    guard(operation);
+    const media = await probeMediaFile(url, {trustedVideo: true, credentials, cache});
     if (diagnostic) Object.assign(diagnostic.cdn, {origin: mediaOrigin(media.url), httpStatus: media.httpStatus,
       contentType: media.contentType, size: media.size, sizeVerified: media.sizeVerified});
     markDiagnostic(diagnostic, 'cdn_check');
@@ -213,7 +172,6 @@ async function inspectMedia(operation, url, {credentials = 'omit', cache = 'defa
 }
 
 function reportOriginalNode(diagnostic, event, attempt) {
-  if (!licenseStatus().valid) return;
   const report = {workId: diagnostic.workId, event, attempt, attempts: diagnostic.originalAttempts};
   const log = event === 'resolved' ? console.info : console.warn;
   log('[大懒虫视频] 原画节点', report);
@@ -223,22 +181,20 @@ function reportOriginalNode(diagnostic, event, attempt) {
   }
 }
 
-async function resolveOriginalMedia(operation, tabId, detail, diagnostic) {
-  guard(operation);
+async function resolveOriginalMedia(tabId, detail, diagnostic) {
   const attempts = [];
   diagnostic.originalAttempts = attempts;
   // A failed delivery node needs a new platform scheduling response, not a
   // rewritten CDN host or a bitrate-list URL that changes the requested quality.
   for (let attempt = 1; attempt <= 3; attempt++) {
     markDiagnostic(diagnostic, 'original_probe_queue', {originalAttempt: attempt});
-    const address = await probeOriginal(operation, tabId, detail, diagnostic);
+    const address = await probeOriginal(tabId, detail, diagnostic);
     try {
-      const media = await inspectMedia(operation, address.url, {cache: 'no-store', diagnostic});
+      const media = await inspectMedia(address.url, {cache: 'no-store', diagnostic});
       attempts.push({attempt, redirect: diagnostic.redirect, cdn: diagnostic.cdn});
       reportOriginalNode(diagnostic, 'resolved', attempt);
       return {...media, playUrl: address.playUrl};
     } catch (error) {
-      guard(operation);
       attempts.push({attempt, redirect: diagnostic.redirect, cdn: diagnostic.cdn,
         message: diagnosticText(error.message)});
       const status = error.mediaResponse?.httpStatus;
@@ -254,19 +210,17 @@ async function resolveOriginalMedia(operation, tabId, detail, diagnostic) {
   }
 }
 
-async function inspectCurrentSource(operation, source, diagnostic) {
-  guard(operation);
+async function inspectCurrentSource(source, diagnostic) {
   const urls = [...new Set([source.url, ...(source.urls || [])])];
   const attempts = [];
   let failure;
   for (const url of urls) {
     try {
-      const media = await inspectMedia(operation, url, {diagnostic});
+      const media = await inspectMedia(url, {diagnostic});
       attempts.push({...diagnostic.cdn});
       markDiagnostic(diagnostic, 'cdn_check', {cdnAttempts: attempts, candidateCount: urls.length});
       return media;
     } catch (error) {
-      guard(operation);
       failure = error;
       attempts.push({...diagnostic.cdn, message: diagnosticText(error.message)});
     }
@@ -275,13 +229,11 @@ async function inspectCurrentSource(operation, source, diagnostic) {
   throw failure;
 }
 
-async function readDouyinMedia(operation, tabId, id, onProgress, allowAvailable = false, diagnostic = {}) {
-  guard(operation);
+async function readDouyinMedia(tabId, id, onProgress, allowAvailable = false, diagnostic = {}) {
   markDiagnostic(diagnostic, 'main_injection');
-  await chrome.scripting.executeScript({target: {tabId}, world: "MAIN", files: ["content/feature-gate.js", "content/page.js"]});
-  guard(operation);
+  await chrome.scripting.executeScript({target: {tabId}, world: "MAIN", files: ["content/page-scope.js", "content/page.js"]});
   markDiagnostic(diagnostic, 'detail_read', {workId: id});
-  const {formats, ...detail} = await inPage(operation, tabId, async id => {
+  const {formats, ...detail} = await inPage(tabId, async id => {
     try { return await window.__douyinOriginal.getDetail(id); }
     catch (error) { return {error: error.message}; }
   }, [id]);
@@ -291,12 +243,11 @@ async function readDouyinMedia(operation, tabId, id, onProgress, allowAvailable 
   await onProgress({message: "正在探测原片地址…"});
   try {
     if (!detail.videoId) throw new Error("详情中没有视频内部 ID，无法探测原片。 ");
-    const media = await resolveOriginalMedia(operation, tabId, detail, diagnostic);
+    const media = await resolveOriginalMedia(tabId, detail, diagnostic);
     return {...detail, ...media, fetchedAt: Date.now(),
       quality: '原片候选', kind: 'video', sourceUrl: `https://www.douyin.com/video/${id}`, sourceTabId: tabId,
       height: Math.min(detail.width, detail.height) || detail.width || detail.height || 0};
   } catch (originalError) {
-    guard(operation);
     if (!allowAvailable) throw originalError;
     await onProgress({message: '原片解析失败，正在读取可用清晰度…'});
     let failure = new Error('详情未返回完整视频地址。');
@@ -306,41 +257,34 @@ async function readDouyinMedia(operation, tabId, id, onProgress, allowAvailable 
         if (attempted.has(url)) continue;
         attempted.add(url);
         try {
-          const media = await inspectMedia(operation, url);
+          const media = await inspectMedia(url);
           return {...detail, ...media, fetchedAt: Date.now(), quality: format.quality,
             width: format.width, height: format.height,
             sourceUrl: `https://www.douyin.com/video/${id}`, sourceTabId: tabId};
-        } catch (error) { guard(operation); failure = error; }
+        } catch (error) { failure = error; }
       }
     }
     throw new Error(`${originalError.message}；可用清晰度解析失败：${failure.message}`);
   }
 }
 
-async function resolveBatchWork(operation, id, onProgress, allowAvailable = true) {
-  guard(operation);
+async function resolveBatchWork(id, onProgress, allowAvailable = true) {
   const tabs = (await chrome.tabs.query({url: 'https://www.douyin.com/*'})).filter(tab => !tab.discarded);
-  guard(operation);
   tabs.sort((a, b) => Number(videoPage(b.url)?.id === id) - Number(videoPage(a.url)?.id === id)
     || (b.lastAccessed || 0) - (a.lastAccessed || 0));
   const tab = tabs[0];
   if (!tab) throw new Error('请先在当前浏览器打开一个抖音网页并完成登录，再解析视频。');
   await onProgress({sourceTabId: tab.id});
-  const media = await readDouyinMedia(operation, tab.id, id, onProgress, allowAvailable);
-  guard(operation);
-  return addMedia(media);
+  return addMedia(await readDouyinMedia(tab.id, id, onProgress, allowAvailable));
 }
 
-async function analyze(operation, tabId, diagnostic) {
-  guard(operation);
+async function analyze(tabId, diagnostic) {
   markDiagnostic(diagnostic, 'page_check');
   const tab = await chrome.tabs.get(tabId);
-  guard(operation);
   const id = awemeId(tab.url);
-  const media = await readDouyinMedia(operation, tabId, id, async () => {}, false, diagnostic);
+  const media = await readDouyinMedia(tabId, id, async () => {}, false, diagnostic);
   markDiagnostic(diagnostic, 'page_check_after_detail');
   const current = await chrome.tabs.get(tabId);
-  guard(operation);
   if (awemeId(current.url) !== id) throw new Error("页面已切换到另一个作品，请重新获取。 ");
   return media;
 }
@@ -348,8 +292,7 @@ async function analyze(operation, tabId, diagnostic) {
 // Keep one original/current resolution per document. Metadata and clicks share the
 // same promise, so rendering a file size does not start a second original probe.
 const detailMedia = new Map();
-async function prepareDetail(operation, tab, quality, playbackKey, currentSource, diagnostic) {
-  guard(operation);
+async function prepareDetail(tab, quality, playbackKey, currentSource, diagnostic) {
   markDiagnostic(diagnostic, 'page_check');
   const page = new URL(tab.url);
   const douyin = Boolean(videoPage(page));
@@ -357,34 +300,31 @@ async function prepareDetail(operation, tab, quality, playbackKey, currentSource
   if (!douyin && !kuaishou) throw new Error('请打开视频详情页。');
   let item;
   if (douyin && quality === 'original') {
-    item = await analyze(operation, tab.id, diagnostic);
+    item = await analyze(tab.id, diagnostic);
   } else {
     markDiagnostic(diagnostic, quality === 'current' ? 'current_quality_read' : 'work_format_read');
-    const source = currentSource || await inPage(operation, tab.id, async (quality, douyin) => {
+    const source = currentSource || await inPage(tab.id, async (quality, douyin) => {
       try {
         return douyin ? await window.__douyinOriginal.getCurrent() : window.__dalanchongDetail.read(quality);
       } catch (error) { return {error: error.message}; }
     }, [quality, douyin]);
     markDiagnostic(diagnostic, quality === 'current' ? 'current_quality_read' : 'work_format_read', {currentSource: sourceDiagnostic(source)});
-    const media = await inspectCurrentSource(operation, source, diagnostic);
+    const media = await inspectCurrentSource(source, diagnostic);
     item = {...source, ...media, sourceUrl: tab.url, sourceTabId: tab.id, quality: quality === 'original' ? '原画' : '当前清晰度'};
   }
-  await requireDetailPage(operation, tab.id, page, quality, playbackKey, currentSource?.url, diagnostic);
+  await requireDetailPage(tab.id, page, quality, playbackKey, currentSource?.url, diagnostic);
   markDiagnostic(diagnostic, 'library_save');
-  guard(operation);
   return addMedia(item);
 }
 
-async function requireDetailPage(operation, tabId, page, quality, playbackKey, sourceUrl, diagnostic) {
-  guard(operation);
+async function requireDetailPage(tabId, page, quality, playbackKey, sourceUrl, diagnostic) {
   markDiagnostic(diagnostic, 'page_check_before_download');
   const current = new URL((await chrome.tabs.get(tabId)).url);
-  guard(operation);
   markDiagnostic(diagnostic, 'page_check_before_download', {currentPageUrl: detailPageURL(current)});
   if (detailPageURL(current) !== detailPageURL(page)) throw new Error('页面已切换，请重新下载当前作品。');
   if (quality === 'current') {
     markDiagnostic(diagnostic, 'playback_check', {expectedPlayer: playerDiagnostic(playbackKey)});
-    const key = await inPage(operation, tabId, () => {
+    const key = await inPage(tabId, () => {
       const video = [...document.querySelectorAll('video')].filter(v => {
         const rect = v.getBoundingClientRect();
         return rect.width > 100 && rect.height > 100 && rect.bottom > 0 && rect.top < innerHeight &&
@@ -395,24 +335,22 @@ async function requireDetailPage(operation, tabId, page, quality, playbackKey, s
     markDiagnostic(diagnostic, 'playback_check', {actualPlayer: playerDiagnostic(key)});
     if (key !== playbackKey) throw new Error('播放清晰度已切换，请重新下载。');
     if (sourceUrl) {
-      const source = await readCurrentSource(operation, tabId, page.hostname === 'www.douyin.com', diagnostic);
+      const source = await readCurrentSource(tabId, page.hostname === 'www.douyin.com', diagnostic);
       markDiagnostic(diagnostic, 'playback_source_check', {currentSource: sourceDiagnostic(source), sourceMatches: source.url === sourceUrl});
       if (source.url !== sourceUrl) throw new Error('播放清晰度已切换，请重新下载。');
     }
   }
 }
 
-async function readCurrentSource(operation, tabId, douyin, diagnostic) {
-  guard(operation);
+async function readCurrentSource(tabId, douyin, diagnostic) {
   // Existing tabs can predate extension injection. The helper's document guard
   // keeps this independent entry point from wrapping the site's requests twice.
   if (douyin) {
     markDiagnostic(diagnostic, 'main_injection');
-    await chrome.scripting.executeScript({target: {tabId}, world: 'MAIN', files: ['content/feature-gate.js', 'content/page.js']});
-    guard(operation);
+    await chrome.scripting.executeScript({target: {tabId}, world: 'MAIN', files: ['content/page-scope.js', 'content/page.js']});
   }
   markDiagnostic(diagnostic, 'current_quality_read');
-  return inPage(operation, tabId, async douyin => {
+  return inPage(tabId, async douyin => {
     try {
       return douyin ? await window.__douyinOriginal.getCurrent() : window.__dalanchongDetail.read('current');
     } catch (error) { return {error: error.message}; }
@@ -422,24 +360,22 @@ async function readCurrentSource(operation, tabId, douyin, diagnostic) {
 listenMessages(new Set(['DETAIL_DOWNLOAD', 'DETAIL_INFO', 'PARSE_URL']), (message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
   if (message.type === 'DETAIL_DOWNLOAD' || message.type === 'DETAIL_INFO') {
-    const operation = beginOperation();
     const diagnostic = {requestId: message.requestId, tabId: sender.tab.id,
       type: message.type, quality: message.quality, stage: 'page_check'};
     (async () => {
       if (!['original', 'current'].includes(message.quality)) throw new Error('请选择下载画质。');
       const tab = await chrome.tabs.get(sender.tab.id);
-      guard(operation);
       const page = new URL(tab.url);
       const pageUrl = detailPageURL(page);
       Object.assign(diagnostic, {pageUrl,
         workId: videoPage(page)?.id || page.pathname.match(/^\/short-video\/([^/]+)/)?.[1]});
       if (!pageUrl || pageUrl !== message.pageUrl) throw new Error('页面已切换，请刷新视频信息。');
       const slot = `${tab.id}:${message.quality}`;
-      const currentSource = message.quality === 'current' ? await readCurrentSource(operation, tab.id, page.hostname === 'www.douyin.com', diagnostic) : null;
+      const currentSource = message.quality === 'current' ? await readCurrentSource(tab.id, page.hostname === 'www.douyin.com', diagnostic) : null;
       if (currentSource) diagnostic.currentSource = sourceDiagnostic(currentSource);
       // A blob source and decoded dimensions can stay unchanged across bitrate
       // switches. Include the actual media URL in current-quality cache identity.
-      const key = `${operation.epoch}:${sender.documentId}:${message.pageUrl}:${message.quality === 'current' ? `${message.playbackKey}:${currentSource.url}:${JSON.stringify(currentSource.urls || [])}` : ''}`;
+      const key = `${sender.documentId}:${message.pageUrl}:${message.quality === 'current' ? `${message.playbackKey}:${currentSource.url}:${JSON.stringify(currentSource.urls || [])}` : ''}`;
       let entry = detailMedia.get(slot);
       diagnostic.cacheHit = entry?.key === key;
       if (entry?.key !== key) {
@@ -448,10 +384,10 @@ listenMessages(new Set(['DETAIL_DOWNLOAD', 'DETAIL_INFO', 'PARSE_URL']), (messag
         const previous = message.quality === 'original' && entry ? entry.promise.catch(() => {}) : Promise.resolve();
         // Shared work owns its stage data; each waiter copies that data into its
         // own request context so INFO/DOWNLOAD failures keep their own requestId.
-        const sharedDiagnostic = {};
-        Object.defineProperty(sharedDiagnostic, 'requests', {value: new Set()});
-        entry = {key, diagnostic: sharedDiagnostic,
-          promise: previous.then(() => prepareDetail(operation, tab, message.quality, message.playbackKey, currentSource, sharedDiagnostic))};
+        const operation = {};
+        Object.defineProperty(operation, 'requests', {value: new Set()});
+        entry = {key, diagnostic: operation,
+          promise: previous.then(() => prepareDetail(tab, message.quality, message.playbackKey, currentSource, operation))};
         detailMedia.set(slot, entry);
         entry.promise.catch(() => { if (detailMedia.get(slot) === entry) detailMedia.delete(slot); });
       }
@@ -459,43 +395,29 @@ listenMessages(new Set(['DETAIL_DOWNLOAD', 'DETAIL_INFO', 'PARSE_URL']), (messag
       let record;
       try { record = await entry.promise; }
       finally { Object.assign(diagnostic, entry.diagnostic); }
-      guard(operation);
       const info = {ok: true, size: record.size, sizeVerified: record.sizeVerified};
       if (message.type === 'DETAIL_INFO') return info;
-      await requireDetailPage(operation, tab.id, page, message.quality, message.playbackKey, currentSource?.url, diagnostic);
+      await requireDetailPage(tab.id, page, message.quality, message.playbackKey, currentSource?.url, diagnostic);
       markDiagnostic(diagnostic, 'download_queue', {size: record.size, sizeVerified: record.sizeVerified});
-      guard(operation);
       const [jobId] = await queueDownloads([record]);
       return {...info, jobId};
     })().then(result => respond({...result, diagnostic}), error => {
       const message = diagnosticText(error.message);
       respond({error: message, diagnostic: {...diagnostic, errorName: error.name,
         message, stack: diagnosticText(error.stack)}});
-    }).finally(() => finishOperation(operation));
+    });
     return true;
   }
   if (message.type === 'PARSE_URL') {
-    const operation = beginOperation();
     const key = `parse:${message.requestId}`;
     let state = {status: 'loading', requestId: message.requestId};
     const progress = async patch => {
-      guard(operation);
       state = {...state, ...patch};
       await chrome.storage.session.set({[key]: state});
-      try { guard(operation); } catch (error) {
-        await chrome.storage.session.remove(key);
-        throw error;
-      }
     };
-    resolveVideoURL(message.value, {signal: operation.controller.signal, check: () => guard(operation),
-      onProgress: progress, resolveWork: (id, progress) => resolveBatchWork(operation, id, progress)})
+    resolveVideoURL(message.value, {onProgress: progress, resolveWork: resolveBatchWork})
       .then(result => progress({status: 'ready', ...result, message: `解析完成，发现 ${result.items.length} 个可下载视频。`}),
-        error => {
-          if (operation.controller.signal.aborted || operation.epoch !== licenseEpoch() || !licenseStatus().valid) {
-            return chrome.storage.session.remove(key);
-          }
-          return progress({status: 'error', message: error.message});
-        }).catch(() => {}).finally(() => finishOperation(operation));
+        error => progress({status: 'error', message: error.message}));
     respond({ok: true});
     return;
   }
@@ -508,33 +430,29 @@ chrome.tabs.onRemoved.addListener(tabId => {
 
 // Platform addresses expire. When a download fails, resolve the source page again once and queue the same quality.
 async function refreshFailedJob(job) {
-  const operation = beginOperation();
   const key = `job:${job.id}`;
   const mark = async patch => {
     const current = (await chrome.storage.session.get(key))[key];
-    guard(operation);
     if (current) await chrome.storage.session.set({[key]: {...current, ...patch}});
   };
+  await mark({refresh: 'running'});
   try {
-    await mark({refresh: 'running'});
     // Automatic refresh must keep the original quality of the queued job.
-    const result = await resolveVideoURL(job.sourceUrl, {signal: operation.controller.signal, check: () => guard(operation), onProgress: async () => {},
-      resolveWork: (id, onProgress) => resolveBatchWork(operation, id, onProgress, false)});
-    guard(operation);
+    const result = await resolveVideoURL(job.sourceUrl, {onProgress: async () => {},
+      resolveWork: (id, onProgress) => resolveBatchWork(id, onProgress, false)});
     const [fresh] = result.items;
     const [jobId] = await queueDownloads([{...fresh, refreshedFrom: job.id}]);
     await mark({refresh: 'done', refreshJobId: jobId});
   } catch (error) {
-    if (!operation.controller.signal.aborted && operation.epoch === licenseEpoch() && licenseStatus().valid) {
-      await mark({refresh: 'failed', refreshError: error.message});
-    }
-  } finally { finishOperation(operation); }
+    await mark({refresh: 'failed', refreshError: error.message});
+  }
 }
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'session' || !licenseStatus().valid) return;
+  if (area !== 'session') return;
   for (const [key, {newValue: job}] of Object.entries(changes)) {
     if (key.startsWith('job:') && job?.status === 'error' && job.quality === '原片候选' && !job.refresh && !job.refreshedFrom && videoPage(job.sourceUrl || 'about:blank')) {
-      void refreshFailedJob(job).catch(() => {});
+      void refreshFailedJob(job);
     }
   }
 });
+

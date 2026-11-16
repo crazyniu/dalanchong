@@ -1,6 +1,6 @@
 
 (() => {
-  const scope = globalThis.__dlcFeatureGate?.begin('xhr');
+  const scope = globalThis.__dlcPageScopes?.begin('xhr');
   if (!scope) return;
   const {setTimeout, setInterval, MutationObserver} = scope;
   const priorFetch = window.fetch, priorOpen = XMLHttpRequest.prototype.open, priorSend = XMLHttpRequest.prototype.send;
@@ -13,7 +13,7 @@
 /**
  * AI module map
  * Purpose: MAIN-world commerce response interception and floating data/download interface.
- * Entry: licensed injection loads this script into the supported commerce routes and frames.
+ * Entry: Manifest content-script injection loads this script into the supported commerce routes and frames.
  * Flow: intercepted commerce responses populate rank/video data and the page interface; window messages connect download and tab actions to content.js.
  * State: rank lists, video identity sets, copied counts, and the last intercepted API are scoped to this page script.
  * Presentation: commerce-ui.css and layout helpers separate fixed controls, scrolling groups, metrics, and associated videos.
@@ -3268,7 +3268,7 @@ async function downloadVideosInBatch(videos) {
 async function requestBrowserDownload(url, filename, folderName) {
   scope.assert();
   return new Promise((resolve, reject) => {
-    scope.cleanup(() => reject(new Error('授权已失效，下载提交已停止')));
+    scope.cleanup(() => reject(new Error('页面操作已停止')));
     function cleanup() {
       clearTimeout(timer)
       scope.unlisten(window, 'message', onResponse)

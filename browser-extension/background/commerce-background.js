@@ -12,76 +12,15 @@ import { canCaptureCommerceSource as canCaptureSource, mediaSize } from '../shar
 import { videoPage } from '../shared/platforms.js'
 import { mediaType, probeMediaFile } from '../shared/media.js'
 import { listenMessages } from './messages.js'
-import {licenseStatus, licenseEpoch, requireLicense, onLicenseChange} from './license-background.js'
-
-// Ownership is retained in session storage so revocation after worker restart cancels
-// only downloads created here, never unrelated browser downloads.
-const commerceControllers = new Set()
-const commerceDownloads = new Set()
-let commerceDownloadWrites = Promise.resolve()
-const commerceDownloadsReady = chrome.storage.session.get('commerceOwnedDownloads').then(stored => {
-  for (const id of Array.isArray(stored.commerceOwnedDownloads) ? stored.commerceOwnedDownloads : [])
-    if (Number.isInteger(id)) commerceDownloads.add(id)
-})
-function saveCommerceDownloads() {
-  const write = commerceDownloadWrites.then(() => chrome.storage.session.set({commerceOwnedDownloads: [...commerceDownloads]}))
-  commerceDownloadWrites = write.catch(() => {})
-  return write
-}
-async function licensedProbe(url, options = {}, epoch = licenseEpoch()) {
-  requireLicense(epoch)
-  const controller = new AbortController()
-  commerceControllers.add(controller)
-  try {
-    const media = await probeMediaFile(url, {...options, signal: controller.signal})
-    requireLicense(epoch)
-    return media
-  } finally { commerceControllers.delete(controller) }
-}
-async function licensedDownload(options, epoch) {
-  await commerceDownloadsReady
-  requireLicense(epoch)
-  const id = await chrome.downloads.download(options)
-  commerceDownloads.add(id)
-  try {
-    requireLicense(epoch)
-    await saveCommerceDownloads()
-    requireLicense(epoch)
-    return id
-  } catch (error) {
-    await chrome.downloads.cancel(id).catch(() => {})
-    commerceDownloads.delete(id)
-    await saveCommerceDownloads().catch(() => {})
-    throw error
-  }
-}
-chrome.downloads.onChanged.addListener(change => {
-  if (['complete', 'interrupted'].includes(change.state?.current)) {
-    void commerceDownloadsReady.then(() => {
-      if (commerceDownloads.delete(change.id)) return saveCommerceDownloads()
-    }).catch(() => {})
-  }
-})
-onLicenseChange(async state => {
-  if (state.valid) return
-  for (const controller of commerceControllers) controller.abort()
-  await commerceDownloadsReady
-  for (const id of [...commerceDownloads]) {
-    await chrome.downloads.cancel(id).catch(() => {})
-    commerceDownloads.delete(id)
-  }
-  await saveCommerceDownloads()
-  DOUYIN_PARAM_CACHE.length = 0
-  for (const tabId of GENERIC_MEDIA_BY_TAB_ID.keys()) void notifyVideoHide(tabId)
-})
 
 async function downloadFile(url, filename, folderName) {
-  const epoch = licenseEpoch(); requireLicense(epoch)
   try {
     console.log('开始下载文件: ' + filename + ' 到文件夹: ' + folderName)
     console.log('下载URL: ' + url)
     if (!url || !url.startsWith('http')) throw new Error('无效的下载URL: ' + url)
-    const media = await licensedProbe(url, {trustedVideo: true}, epoch)
+    const media = await probeMediaFile(url, {
+      trustedVideo: true,
+    })
     if (media.kind !== 'video') throw new Error('该地址不是可直接保存的视频文件。')
     const downloadOptions = {
       url: media.url,
@@ -89,7 +28,7 @@ async function downloadFile(url, filename, folderName) {
       saveAs: false,
       conflictAction: 'uniquify',
     }
-    const downloadId = await licensedDownload(downloadOptions, epoch)
+    const downloadId = await chrome.downloads.download(downloadOptions)
     console.log('文件下载任务已创建，下载ID: ' + downloadId)
     return downloadId
   } catch (error) {
@@ -127,7 +66,6 @@ let isDouyinParamCacheRestored = false
 let genericMediaRestore
 
 async function saveDouyinParamCache() {
-  if (!licenseStatus().valid) return
   try {
     await chrome.storage.local.set({
       [DOUYIN_PARAM_CACHE_STORAGE_KEY]: DOUYIN_PARAM_CACHE.slice(0, 10),
@@ -156,7 +94,6 @@ async function restoreDouyinParamCache() {
 }
 
 function rememberDouyinDetailParams(details) {
-  if (!licenseStatus().valid) return
   if (!details || !details.url || details.url.includes('chrome-extension://')) return
   if (details.initiator && details.initiator.includes('extension://')) return
   let params
@@ -222,7 +159,6 @@ function buildDouyinRefreshUrl(awemeId, params) {
 }
 
 async function requestDouyinPageFetch(url, requestedTabId) {
-  const epoch = licenseEpoch(); requireLicense(epoch)
   try {
     let tabId = requestedTabId
     if (!tabId) {
@@ -233,7 +169,6 @@ async function requestDouyinPageFetch(url, requestedTabId) {
       if (!tabs.length || !tabs[0].id) return
       tabId = tabs[0].id
     }
-    requireLicense(epoch)
     await chrome.tabs.sendMessage(tabId, {
       type: DOUYIN_MESSAGE_TYPES.FETCH_AWEME_DETAIL_REQ,
       data: {
@@ -246,32 +181,25 @@ async function requestDouyinPageFetch(url, requestedTabId) {
 }
 
 async function fetchDouyinAwemeDetail(awemeId, tabId) {
-  const epoch = licenseEpoch(); requireLicense(epoch)
   await restoreDouyinParamCache()
   await waitForDouyinParams(300)
   for (let attempt = 0; attempt < 10; attempt++) {
-    requireLicense(epoch)
     const cachedParams = DOUYIN_PARAM_CACHE.slice().sort((left, right) => right.time - left.time)[0]
     if (!cachedParams) {
       await waitForDouyinParams(200)
       continue
     }
     const url = buildDouyinDetailUrl(awemeId, cachedParams.params)
-    const controller = new AbortController()
-    commerceControllers.add(controller)
-    const timer = setTimeout(() => controller.abort(), 15000)
     try {
-      requireLicense(epoch)
-      const response = await fetch(url, {credentials: 'include', signal: controller.signal})
+      const response = await fetch(url, {
+        credentials: 'include',
+      })
       if (!response.ok) throw new Error('Douyin detail request failed: ' + response.status)
       const body = await response.text()
       if (!body) throw new Error('Douyin detail response is empty')
       const detail = JSON.parse(body)
-      requireLicense(epoch)
       if (detail && detail.aweme_detail) return detail.aweme_detail
-    } catch (error) { if (error?.license) throw error }
-    finally { clearTimeout(timer); commerceControllers.delete(controller) }
-    requireLicense(epoch)
+    } catch (error) {}
     DOUYIN_PARAM_CACHE.shift()
     saveDouyinParamCache()
     await requestDouyinPageFetch(buildDouyinRefreshUrl(awemeId, cachedParams.params), tabId)
@@ -281,7 +209,6 @@ async function fetchDouyinAwemeDetail(awemeId, tabId) {
 }
 
 async function sendDouyinDownloadStatus(requestedTabId, text, status, timeout) {
-  if (!licenseStatus().valid) return
   try {
     let tabId = requestedTabId
     if (!tabId) {
@@ -379,7 +306,6 @@ function buildDouyinVideoDownloadInfo(aweme) {
 }
 
 async function downloadDouyinAwemeVideo(message, sender) {
-  const epoch = licenseEpoch(); requireLicense(epoch)
   const data = message.data || {}
   const tabId = sender && sender.tab ? sender.tab.id : null
   const awemeId = String(data.vid || data.awemeId || '').trim()
@@ -418,14 +344,16 @@ async function downloadDouyinAwemeVideo(message, sender) {
       error: DOUYIN_SNACKBAR_TEXT.parseInformationFail,
     }
   }
-  const media = await licensedProbe(downloadInfo.url, {trustedVideo: true}, epoch)
+  const media = await probeMediaFile(downloadInfo.url, {
+    trustedVideo: true,
+  })
   if (media.kind !== 'video') throw new Error('该作品未返回可直接保存的视频文件。')
-  const downloadId = await licensedDownload({
+  const downloadId = await chrome.downloads.download({
     url: media.url,
     filename: downloadInfo.filename,
     saveAs: false,
     conflictAction: 'uniquify',
-  }, epoch)
+  })
   let startNotified = false
   const onDownloadChanged = (change) => {
     if (change.id !== downloadId) return
@@ -512,10 +440,9 @@ async function isSupportedCommerceTab(tabId) {
 }
 
 async function notifyVideoUpdate(tabId) {
-  if (!licenseStatus().valid || !tabId) return
+  if (!tabId) return
   try {
     const items = await getGenericMediaList(tabId)
-    if (!licenseStatus().valid) return
     await chrome.tabs.sendMessage(tabId, {
       type: 'GENERIC_VIDEO_UPDATE',
       items,
@@ -578,14 +505,12 @@ let genericMediaSave
 let genericMediaDirty = false
 
 function saveGenericMediaCache() {
-  if (!licenseStatus().valid) return Promise.resolve()
   genericMediaDirty = true
   if (genericMediaSave) return genericMediaSave
   // Network bursts share one in-flight write, followed by the latest cache state.
   genericMediaSave = (async () => {
     do {
       genericMediaDirty = false
-      if (!licenseStatus().valid) return
       await chrome.storage.local.set({
         [GENERIC_MEDIA_STORAGE_KEY]: serializeGenericMediaCache(),
       })
@@ -622,8 +547,6 @@ function restoreGenericMediaCache() {
 }
 
 async function rememberGenericMedia(details) {
-  if (!licenseStatus().valid) return
-  const epoch = licenseEpoch()
   if (
     !details ||
     details.tabId == null ||
@@ -658,7 +581,7 @@ async function rememberGenericMedia(details) {
     }
   } else {
     try {
-      media = await licensedProbe(details.url, {}, epoch)
+      media = await probeMediaFile(details.url)
     } catch {
       return
     }
@@ -666,7 +589,6 @@ async function rememberGenericMedia(details) {
     const currentTab = await chrome.tabs.get(details.tabId).catch(() => null)
     if (currentTab?.url !== sourceTab.url) return
   }
-  requireLicense(epoch)
   const item = {
     mediaVerified: true,
     sourceUrl: sourceTab.url,
@@ -767,7 +689,6 @@ function getMessageTabId(message, sender) {
 }
 
 async function downloadGenericMediaItem(message, sender) {
-  const epoch = licenseEpoch(); requireLicense(epoch)
   await restoreGenericMediaCache()
   const data = message.data || {}
   const tabId = getMessageTabId(message, sender)
@@ -790,7 +711,9 @@ async function downloadGenericMediaItem(message, sender) {
     }
   }
   if (!(await isSupportedCommerceTab(tabId))) throw new Error('当前网页不支持视频下载。')
-  const media = await licensedProbe(item.url, {trustedVideo: Boolean(item.mediaVerified)}, epoch)
+  const media = await probeMediaFile(item.url, {
+    trustedVideo: Boolean(item.mediaVerified),
+  })
   if (media.kind !== 'video') throw new Error('该地址不是可直接保存的视频文件。')
   const baseName =
     sanitizeDownloadName(data.filename || data.pageTitle || item.name || 'video') || 'video'
@@ -800,12 +723,12 @@ async function downloadGenericMediaItem(message, sender) {
       baseName,
       item.extension || getGenericExtensionFromContentType(item.contentType) || 'mp4',
     )
-  const downloadId = await licensedDownload({
+  const downloadId = await chrome.downloads.download({
     url: media.url,
     filename,
     saveAs: false,
     conflictAction: 'uniquify',
-  }, epoch)
+  })
   return {
     success: true,
     downloadId,
@@ -818,7 +741,6 @@ function initializeDouyinVideoDownloader() {
   if (!chrome.webRequest || !chrome.webRequest.onBeforeRequest) return
   chrome.webRequest.onBeforeRequest.addListener(
     (details) => {
-      if (!licenseStatus().valid) return
       rememberDouyinDetailParams(details)
     },
     {
@@ -832,7 +754,6 @@ function initializeGenericVideoDownloader() {
   restoreGenericMediaCache()
   chrome.webRequest.onResponseStarted.addListener(
     (details) => {
-      if (!licenseStatus().valid) return
       void rememberGenericMedia(details).catch(() => {})
     },
     {
@@ -884,9 +805,7 @@ listenMessages(
       }
     } else if (message.type === 'VIDEO_OPENED_TO_BACK') {
       console.log('Background收到视频打开消息:', message.url)
-      const epoch = licenseEpoch()
       chrome.tabs.query({}, (tabs) => {
-        if (!licenseStatus().valid || epoch !== licenseEpoch()) return
         tabs.forEach((tab) => {
           try {
             const notification = {

@@ -10,11 +10,6 @@
  */
 import '../../vendor/ui/components.js';
 import {$, copyText, downloadState, element, groupedItems, iconButton, indexDownloadJobs, loadResolutions, qualitySelect, qualityText, queue, readLibrary, send, showLibraryError, sizeText, toast} from '../../shared/ui.js';
-import {requirePageLicense} from '../../shared/license-ui.js';
-import {verifyWorkspaceLicense} from '../../shared/workspace-nav.js';
-
-await requirePageLicense();
-
 const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
 const selected = new Set();
 const chosenFormats = new Map();
@@ -130,7 +125,6 @@ $('clear').addEventListener('click', async () => {
 $('open-more').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true;
   try {
-    await verifyWorkspaceLicense(chrome.runtime);
     const url = new URL(chrome.runtime.getURL('manager.html'));
     url.searchParams.set('view', 'captured');
     if (selected.size) url.searchParams.set('ids', visible.filter(item => selected.has(item.groupKey)).map(item => item.id).join(','));

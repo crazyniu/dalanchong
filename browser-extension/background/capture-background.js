@@ -12,13 +12,12 @@ import {addMedia} from './library.js';
 import {mediaType} from '../shared/media.js';
 import {canCaptureSource, capturePagePatterns, mediaSize, mediaTabIds} from '../shared/media-records.js';
 import {listenMessages} from './messages.js';
-import {licenseStatus, licenseEpoch, onLicenseChange} from './license-background.js';
 
 const captured = new Map();
 const excludedPath = /\.(ts|m4s|m3u8|mpd|vtt|mp3|m4a|aac|wav|flac)(?:$|[?#])/i;
 
 function saveCapture(item, tab) {
-  if (!licenseStatus().valid || !canCaptureSource(tab.url)) return;
+  if (!canCaptureSource(tab.url)) return;
   const key = `${tab.id}:${item.url}`;
   const previous = captured.get(key);
   const sameSource = previous?.sourceUrl === tab.url;
@@ -57,8 +56,7 @@ listenMessages(new Set(['CAPTURE_MEDIA']), (message, sender, respond) => {
 // or lives in an iframe. Range responses still identify the complete file URL;
 // playlists, segments and audio are excluded instead of appearing as whole videos.
 chrome.webRequest.onHeadersReceived.addListener(details => {
-  if (!licenseStatus().valid || details.tabId < 0 || details.statusCode < 200 || details.statusCode >= 300 || excludedPath.test(details.url)) return;
-  const epoch = licenseEpoch();
+  if (details.tabId < 0 || details.statusCode < 200 || details.statusCode >= 300 || excludedPath.test(details.url)) return;
   const header = name => details.responseHeaders.find(item => item.name.toLowerCase() === name)?.value || '';
   const contentType = header('content-type');
   const mime = contentType.split(';')[0].trim().toLowerCase();
@@ -70,7 +68,7 @@ chrome.webRequest.onHeadersReceived.addListener(details => {
   const size = mediaSize(details.statusCode, header);
   const metadata = {url: details.url, ...(contentType ? {contentType} : {}),
     ...(size ? {size, sizeVerified: true} : {})};
-  void chrome.tabs.get(details.tabId).then(tab => epoch === licenseEpoch() ? saveCapture(metadata, tab) : undefined)
+  void chrome.tabs.get(details.tabId).then(tab => saveCapture(metadata, tab))
     .catch(error => console.debug('视频响应未保存', error.message));
 }, {urls: ['http://*/*', 'https://*/*']}, ['responseHeaders']);
 
@@ -90,8 +88,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 function watchTab(tab) {
-  if (!licenseStatus().valid || !canCaptureSource(tab.url) || tab.discarded) return;
-  return chrome.scripting.executeScript({target: {tabId: tab.id, allFrames: true}, files: ['content/feature-gate.js', 'content/capture.js']})
+  if (!canCaptureSource(tab.url) || tab.discarded) return;
+  return chrome.scripting.executeScript({target: {tabId: tab.id, allFrames: true}, files: ['content/page-scope.js', 'content/capture.js']})
     .catch(error => console.debug('视频监听未注入', error.message));
 }
 
@@ -100,5 +98,3 @@ void chrome.tabs.query({url: capturePagePatterns}).then(tabs => Promise.all(tabs
 chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
   if (change.status === 'complete') void watchTab(tab);
 });
-
-onLicenseChange(state => { if (!state.valid) captured.clear(); });

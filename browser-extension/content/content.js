@@ -1,11 +1,11 @@
 
 (() => {
-  const scope = globalThis.__dlcFeatureGate?.begin('content');
+  const scope = globalThis.__dlcPageScopes?.begin('content');
   if (!scope) return;
   const {setTimeout, setInterval, MutationObserver} = scope;
 /**
  * AI module map
- * Purpose: isolated-world bridge for the licensed commerce pages and frames.
+ * Purpose: isolated-world bridge for the supported commerce pages and frames.
  * Entry: page message events from xhr.js and runtime messages from commerce-background.js.
  * Flow: forward tab/download requests to Chrome, return download acknowledgements
  * to the same source page. No page-triggered storage debugging commands are exposed.

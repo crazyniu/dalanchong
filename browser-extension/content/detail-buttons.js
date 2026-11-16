@@ -1,12 +1,12 @@
 
 (() => {
-  const scope = globalThis.__dlcFeatureGate?.begin('detail-buttons');
+  const scope = globalThis.__dlcPageScopes?.begin('detail-buttons');
   if (!scope) return;
   const {setTimeout, setInterval, MutationObserver} = scope;
 /**
  * AI module map
  * Purpose: isolated-world original/current download controls with verified file sizes.
- * Entry: licensed injection; DETAIL_INFO reads metadata and DETAIL_DOWNLOAD queues it.
+ * Entry: Manifest content-script injection; DETAIL_INFO reads metadata and DETAIL_DOWNLOAD queues it.
  * Flow: the active Douyin work uses modal_id, vid, then pathname, including search overlays.
  * Position/quality observations maintain identity only; pointer entry or focus reads
  * just that button's size. Revision keys discard stale metadata after source changes.

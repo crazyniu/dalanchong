@@ -7,7 +7,7 @@
  * Boundary: no parser/queue state; all video row actions remain available at every width.
  */
 .topbar { background: var(--surface); border-bottom: 1px solid var(--line); }
-.topbar-inner { display: flex; align-items: center; max-width: 1180px; min-height: 56px; margin: 0 auto; padding: 10px 20px; }
+.topbar-inner { display: flex; align-items: center; max-width: 1180px; min-height: 64px; margin: 0 auto; padding: 10px 20px; }
 .page { max-width: 1180px; margin: 0 auto; padding: 24px 20px 112px; }
 .view-head { margin-bottom: 16px; }
 .view-head h1 { font-size: 24px; line-height: 1.35; font-weight: 600; }

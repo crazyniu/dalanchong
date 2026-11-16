@@ -78,10 +78,11 @@ export function videoGroupKey(item) {
 
 export function videoGroups(items) {
   const groups = new Map();
+  const qualityScore = item => item.quality === '原片候选' ? 2 : 1;
   for (const item of items) {
     const key = videoGroupKey(item);
     if (!groups.has(key)) groups.set(key, {key, formats: []});
     groups.get(key).formats.push(item);
   }
-  return [...groups.values()].map(group => ({...group, formats: group.formats.sort((a, b) => (a.ruleOrder ?? 0) - (b.ruleOrder ?? 0))}));
+  return [...groups.values()].map(group => ({...group, formats: group.formats.sort((a, b) => qualityScore(b) - qualityScore(a) || (b.height || 0) - (a.height || 0) || b.updatedAt - a.updatedAt)}));
 }

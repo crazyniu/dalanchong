@@ -7,7 +7,7 @@
  * Shared theme tokens own controls and colors.
  */
 body { display: flex; flex-direction: column; width: 480px; max-height: 580px; background: var(--surface); }
-.bar, .workspace-actions, .list-head, .batch-actions, .library-status, .empty { flex-shrink: 0; }
+.bar, .list-head, .batch-actions, .library-status, .empty { flex-shrink: 0; }
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px 12px; }
 .list-head { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 16px 12px; }
 #selection-count { margin-left: auto; }
@@ -34,12 +34,9 @@ body { display: flex; flex-direction: column; width: 480px; max-height: 580px; b
 .toast { bottom: 12px; }
 body:has(.batch-actions:not([hidden])) .toast { bottom: 72px; }
 
-.workspace-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 18px 16px; border-bottom: 1px solid var(--line); }
-.workspace-actions .btn { min-height: 40px; justify-content: center; }
-.settings-button { min-height: 34px; padding: 6px 12px; }
+.more-button { min-height: 34px; padding: 6px 12px; }
 .list-head { padding: 12px 18px; }
 .empty { min-height: 150px; gap: 12px; }
 .empty > wa-icon { font-size: 32px; }
 .empty > span { font-size: 14px; }
 
-.workspace-actions #open-workspace { grid-column: 1 / -1; }

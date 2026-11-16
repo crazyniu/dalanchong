@@ -25,8 +25,6 @@ export async function prepareExtension(destination) {
       return !/\.md$/i.test(name) || license
     },
   })
-  // Release copies always use online licensing, regardless of local test activation.
-  await writeFile(path.join(destination, 'shared/build-mode.js'), 'export const testLicense = null;\n')
   // Standalone releases only update the staged manifest, never maintained source.
   const { version } = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
   const manifestPath = path.join(destination, 'manifest.json')

@@ -1,6 +1,6 @@
 
 (() => {
-  const scope = globalThis.__dlcFeatureGate?.begin('page');
+  const scope = globalThis.__dlcPageScopes?.begin('page');
   if (!scope) return;
   const {setTimeout, setInterval, MutationObserver} = scope;
   const priorFetch = window.fetch, priorOpen = XMLHttpRequest.prototype.open, priorSend = XMLHttpRequest.prototype.send;
@@ -13,7 +13,7 @@
 /**
  * AI module map
  * Purpose: MAIN-world Douyin detail reader and original-file probe helper.
- * Entry: licensed injection exposes window.__douyinOriginal to background.js injected calls.
+ * Entry: Manifest content-script injection exposes window.__douyinOriginal to background.js injected calls.
  * Flow: bootstrap data, React Flight records, and observed work API responses populate a bounded detail cache; complete MP4 addresses also supply available-quality batch results, while the bound player's definition selects current-quality downloads.
  * State: the cache keeps only download fields for the latest 100 works; probe resources belong to the current document. Original probes revalidate platform scheduling, and the background observes cross-origin redirect addresses.
  * Invariants: keep the site's own fetch/XHR responses and SDK call chain intact; current-quality selection uses the active player gear and quality type.
@@ -115,9 +115,9 @@
       xhr.open("GET", `/aweme/v1/web/aweme/detail/?${params}`);
       xhr.withCredentials = true;
       xhr.timeout = 12000;
-      scope.cleanup(() => { xhr.abort(); reject(new Error('授权已失效，详情请求已停止')); });
+      scope.cleanup(() => { xhr.abort(); reject(new Error('详情请求已停止')); });
       xhr.onload = () => {
-        if (!scope.active) return reject(new Error('授权已失效'));
+        if (!scope.active) return reject(new Error('页面操作已停止'));
         const diagnostic = {workId: id, endpoint: '/aweme/v1/web/aweme/detail/',
           httpStatus: xhr.status, contentType: xhr.getResponseHeader('content-type') || ''};
         console.info('[大懒虫视频] 详情接口响应', diagnostic);

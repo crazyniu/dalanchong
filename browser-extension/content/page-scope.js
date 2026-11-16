@@ -1,24 +1,16 @@
-/** Per-document lifecycle for licensed features. Never enables via page messages. */
+/** Per-document lifecycle for video UI, observers, timers and page hooks. */
 (() => {
-  if (globalThis.__dlcFeatureGate?.active) return;
+  if (globalThis.__dlcPageScopes) return;
   const scopes = new Map();
-  let active = true;
-  const gate = {
-    get active() { return active; },
-    stop() {
-      if (!active) return;
-      active = false;
-      for (const scope of scopes.values()) scope.stop();
-      scopes.clear();
-    },
+  const pageScopes = {
     begin(name) {
-      if (!active || scopes.has(name)) return null;
+      if (scopes.has(name)) return null;
       let running = true;
       const cleanup = new Set();
       const eventBindings = new Set();
       const scope = {
-        get active() { return active && running; },
-        assert() { if (!scope.active) throw new Error('插件未激活或授权已失效'); },
+        get active() { return running; },
+        assert() { if (!scope.active) throw new Error('页面操作已停止'); },
         cleanup(fn) { if (scope.active) cleanup.add(fn); else fn(); },
         stop() {
           if (!running) return;
@@ -90,16 +82,5 @@
       return scope;
     }
   };
-  globalThis.__dlcFeatureGate = gate;
-  // Only the extension worker can revoke isolated-world features. No message enables them.
-  if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.onMessage) {
-    const changed = (message, sender) => {
-      if (sender.id === chrome.runtime.id && message?.type === 'LICENSE_CHANGED' && !message.license?.valid) {
-        gate.stop();
-      }
-    };
-    chrome.runtime.onMessage.addListener(changed);
-    const stop = gate.stop;
-    gate.stop = () => { stop(); chrome.runtime.onMessage.removeListener(changed); };
-  }
+  globalThis.__dlcPageScopes = pageScopes;
 })();

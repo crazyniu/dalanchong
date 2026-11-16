@@ -71,7 +71,6 @@ export function verifyPackage(archive, expectedVersion) {
       // Relative static imports/re-exports and literal dynamic imports are preserved by esbuild.
       for (const match of text.matchAll(/(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'](\.[^"']+)["']/g)) requireFile(match[1], name);
       for (const match of text.matchAll(/\bgetURL\(\s*["']([^"']+)["']/g)) if (match[1] !== '/') requireFile(match[1]);
-      if (name === 'shared/feature-scripts.js') for (const match of text.matchAll(/["']([^"']+\.(?:js|mjs|css))["']/g)) requireFile(match[1]);
     }
     if (name.endsWith('.html')) for (const match of text.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/gi)) requireFile(match[1], name);
     if (name.endsWith('.css')) for (const match of text.matchAll(/url\(\s*["']?([^\s"')]+)["']?\s*\)/g)) requireFile(match[1], name);

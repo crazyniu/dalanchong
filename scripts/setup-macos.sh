@@ -11,7 +11,7 @@ trap 'printf "\n安装未完成（第 %s 行）。请保留上面的错误信息
 case "$(uname -m)" in arm64) ARCH=arm64;; x86_64) ARCH=x64;; *) fail '仅支持 Apple Silicon 或 Intel Mac。';; esac
 [[ $# -eq 0 || ( $# -eq 1 && "$1" == --dry-run ) ]] || fail '仅支持 --dry-run 参数。'
 if [[ "${1:-}" == --dry-run ]]; then
-  printf '项目：%s\n架构：%s\n优先复用 Node >=24 和 npm，否则下载 Node %s。\n工具目录：%s\npnpm：%s\n将运行 frozen install 和 build:ui；不会修改系统配置。\n' "$ROOT" "$ARCH" "$NODE_VERSION" "$TOOLS" "$PNPM_VERSION"
+  printf '项目：%s\n架构：%s\n优先复用 Node >=24 和 npm，否则下载 Node %s。\n工具目录：%s\npnpm：%s\n将安装打包依赖；插件源码可直接加载，不会修改系统配置。\n' "$ROOT" "$ARCH" "$NODE_VERSION" "$TOOLS" "$PNPM_VERSION"
   exit 0
 fi
 mkdir -p "$TOOLS" "$TOOLS/cache" "$TOOLS/npm-cache" "$TOOLS/pnpm-home" "$TOOLS/config"
@@ -65,10 +65,9 @@ const bin = path.resolve(root, pkg.bin.pnpm);
 if (!bin.startsWith(root + path.sep) || !fs.statSync(bin).isFile()) throw Error("Invalid pnpm entry point");
 process.stdout.write(bin);
 ' "$TOOLS/pnpm/node_modules/pnpm" "$PNPM_VERSION")"
-# Lifecycle scripts (including prepare) must never resolve an old global pnpm.
+# Dependency scripts use the project-local pnpm and selected Node.
 export PATH="$TOOLS/pnpm/node_modules/.bin:$(dirname "$NODE_BIN"):$PATH"
 [[ "$("$NODE_BIN" "$PNPM_CLI" --version)" == "$PNPM_VERSION" ]] || fail 'pnpm 版本不符合固定版本要求。'
 cd "$ROOT"
 "$NODE_BIN" "$PNPM_CLI" install --frozen-lockfile --store-dir "$TOOLS/pnpm-store"
-"$NODE_BIN" "$PNPM_CLI" build:ui
-printf '\n安装与构建完成。\n打开浏览器扩展管理页，开启开发者模式，选择“加载已解压的扩展程序”：\n%s/browser-extension\n不会自动修改浏览器安装策略。\n' "$ROOT"
+printf '\n依赖安装完成。\n打开浏览器扩展管理页，开启开发者模式，选择“加载已解压的扩展程序”：\n%s/browser-extension\n不会自动修改浏览器安装策略。\n' "$ROOT"

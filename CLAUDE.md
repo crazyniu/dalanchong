@@ -1,14 +1,12 @@
-# Claude 开发入口
+# 开发入口
 
-先完整阅读 [AGENTS.md](AGENTS.md)，它是本仓库统一的开发、权限、数据与验证约定。本文件不定义另一套规则。
+先阅读 [AGENTS.md](AGENTS.md) 与 [README.md](README.md)。
 
-主要入口：
+- `browser-extension/manifest.json`：插件权限、页面与注入范围。
+- `browser-extension/background/background.js`：视频解析与后台消息。
+- `browser-extension/background/library.js`：媒体记录与下载队列。
+- `browser-extension/content/`：网页视频识别、详情按钮与电商页面增强。
+- `browser-extension/pages/`：弹窗、管理页与播放器。
+- [构建与发布](docs/EXTENSION_RELEASE.md)：签名和发行流程。
 
-- [README](README.md)：当前功能、安装、数据流与开发命令。
-- `src/invitation-ui/entry.tsx`：网页内 React 工作区入口。
-- `browser-extension/background.js`：worker 入口。
-- `browser-extension/invitation/background/invite-background.js`：邀约消息与作用域边界。
-- `browser-extension/background/license-background.js`：授权状态与撤销事件。
-- [验证与验收](docs/TESTING.md)：自动测试与真实环境边界。
-
-在功能分支提交 PR；不自动合并、部署、激活真实账号或发送真实邀约。发现文档和实现不一致时，先报告并在授权范围内修正，不能默默扩大范围。
+只在用户指定范围内修改，不运行浏览器验收，不自动发布。

@@ -8,7 +8,7 @@
 
 这是压缩和局部标识符混淆，不是不可逆加密。客户端始终要执行 JavaScript，无法保证不可还原；秘密不应放进扩展。Chrome Web Store 允许常规压缩，不允许隐藏功能的代码混淆，见[代码可读性政策](https://developer.chrome.com/docs/webstore/program-policies/code-readability)。
 
-CRX3 是签名发行文件，不等于跨浏览器安装许可。官方 Chrome 在 Windows/macOS 上限制商店外安装，见[官方分发说明](https://developer.chrome.com/docs/extensions/how-to/distribute)。同时提供 ZIP，解压后可在允许开发者模式的浏览器中加载；不同 Chromium 发行版按其政策安装。ZIP 含签名公钥以固定扩展 ID。GitHub Release 不自动更新已有扩展。
+CRX3 是签名发行文件，不等于跨浏览器安装许可。官方 Chrome 在 Windows/macOS 上限制商店外安装，见[官方分发说明](https://developer.chrome.com/docs/extensions/how-to/distribute)。同时提供 ZIP，解压后可在允许开发者模式的浏览器中加载；不同 Chromium 发行版按其政策安装。签名 ZIP 含公钥以固定扩展 ID；无签名 ZIP 不固定此身份。GitHub Release 不自动更新已有扩展。
 
 ## 首次配置
 
@@ -44,7 +44,7 @@ CRX3 是签名发行文件，不等于跨浏览器安装许可。官方 Chrome �
 - `SHA256SUMS`
 - `package-info.json`（版本、源提交、公开扩展 ID 和保护方式，无私钥）
 
-GitHub 自动提供的源码归档仍为可读源码，符合“源码不加密”的要求。发布只表示打包与上传成功，不表示真实账号、邀约、视频下载或各浏览器兼容验收完成。
+GitHub 自动提供的源码归档仍为可读源码，符合“源码不加密”的要求。发布只表示打包与上传成功，不表示真实账号的视频下载或各浏览器兼容验收完成。
 
 ## 本地必要打包
 

@@ -1,7 +1,7 @@
 /**
  * AI module map
  * Purpose: captured-video batch downloads and Douyin original-first link parsing.
- * Entry: manager.html loads from the popup's captured scope or the shop bookmark.
+ * Entry: manager.html loads from the popup's captured scope or a browser bookmark.
  * Flow: compact share-link input calls background PARSE_URL; collapsible parse records
  * accompany the main video list, and its fixed batch bar copies or queues selected formats.
  * State: parsed group keys persist in page sessionStorage; selection uses those same
@@ -19,12 +19,6 @@ import {mediaTabIds, videoGroups, videoGroupKey} from '../../shared/media-record
 import {videoPage} from '../../shared/platforms.js';
 import {extractVideoURLs} from '../../shared/resolve.js';
 import {$, activeStates, copyText, downloadState, element, groupedItems, icon, iconButton, indexDownloadJobs, loadResolutions, probeResolutions, qualitySelect, qualityText, queue, readLibrary, send, showLibraryError, sizeText, thumb, toast} from '../../shared/ui.js';
-import {requirePageLicense} from '../../shared/license-ui.js';
-import {bindWorkspaceNavigation} from '../../shared/workspace-nav.js';
-
-await requirePageLicense();
-bindWorkspaceNavigation(document, {tabs:chrome.tabs, windows:chrome.windows, runtime:chrome.runtime, onError: message => toast(message, true)});
-
 const selected = new Set();
 const chosenFormats = new Map();
 const renderedMedia = new Map();

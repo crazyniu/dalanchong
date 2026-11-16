@@ -1,6 +1,6 @@
 
 (() => {
-  const scope = globalThis.__dlcFeatureGate?.begin('capture');
+  const scope = globalThis.__dlcPageScopes?.begin('capture');
   if (!scope) return;
   const {setTimeout, setInterval, MutationObserver} = scope;
 /**
