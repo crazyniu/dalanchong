@@ -29,7 +29,7 @@ test('IndexedDB 10000-row dataset filters, paginates and isolates scope',async t
   for(let offset=0;offset<9999;offset+=1000)await db.upsertTalents(a,Array.from({length:Math.min(1000,9999-offset)},(_,i)=>({id:String(offset+i),name:'Talent '+(offset+i),fans:offset+i,gender:(offset+i)%2?'女':'男',source:'广场'})));
   await db.upsertTalents(b,[{id:'0',name:'Other account',fans:99999,source:'其他'}]);
   const seedMs=performance.now()-seedStart,start=performance.now();
-  const data=await queryInvitationData(db,a,{kind:'talents',page:3,pageSize:20,filters:{gender:'female',minFans:5000}});
+  const data=await queryInvitationData(db,a,{kind:'talents',page:3,pageSize:20,filters:{choices:{gender:'女'},ranges:{fans:{min:'5000',max:''}}}});
   const queryMs=performance.now()-start,bytes=Buffer.byteLength(JSON.stringify(data));
   assert.equal(data.total,2499);assert.equal(data.accountTotal,9999);assert.equal(data.rows.length,20);assert.equal(data.page,3);
   assert.ok(data.rows.every(row=>row.fans>=5000&&row.gender==='女'));assert.deepEqual(data.sources,['广场']);assert.ok(data.rows.every(row=>row.name!=='Other account'));assert.ok(bytes<15000);
@@ -47,12 +47,11 @@ test('metric columns match platform and omit placeholder-only values while retai
  assert.deepEqual((await queryInvitationData(local,scope,{kind:'talents'})).columns,['sales30d','settlement30d']);
 });
 
-test('source selection remains exact for stored long and space-containing labels',async()=>{
+test('source search uses the same trimmed keyword for stored source labels',async()=>{
  const source=' 来源 '+ '长'.repeat(230)+' ';
  const rows=[{id:'1',name:'One',source},{id:'2',name:'Two',source:source.trim()}];
  const local={exportRows:async(_scope,_filters,records)=>records?[]:rows};
- const data=await queryInvitationData(local,scope,{kind:'talents',filters:{source}});
- assert.deepEqual(data.rows.map(row=>row.id),['1']);
- await assert.rejects(queryInvitationData(local,scope,{kind:'talents',filters:{source:'x'.repeat(501)}}),/采集来源/);
+ const data=await queryInvitationData(local,scope,{kind:'talents',filters:{query:'来源'}});
+ assert.deepEqual(data.rows.map(row=>row.id),['1','2']);
  await assert.rejects(queryInvitationData(local,scope,{kind:'record',id:''}),/记录 ID/);
 });

@@ -60,10 +60,14 @@ export type CollectedTalent = {
   categories?: string[]
   contentType?: string
   salesMode?: string
+  deliveryTypes?: ('live' | 'video')[]
   sales7d?: string
   sales30d?: string
   settlement30d?: string
   liveSales30d?: string
+  avgLiveSales7d?: string
+  avgLiveSales30d?: string
+  videoSales7d?: string
   videoSales30d?: string
   imageTextSales30d?: string
   windowSales30d?: string

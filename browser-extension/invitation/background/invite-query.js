@@ -22,13 +22,13 @@ export async function queryInvitationData(store, scope, input) {
   if (records) {
     filtered = await store.exportRows(scope, input.filters || {}, true);
   } else {
-    const filters = normalizedFilters(input.filters || {});
+    const filters = normalizedFilters(input.filters || {}, false, scope.platform);
     const snapshots = await Promise.all([store.exportRows(scope, {}, false), store.exportRows(scope, {}, true)]);
     all = snapshots[0];
     invitationById = new Map();
     // Records are newest-first. Preserve the latest outcome if a source ever has repeats.
     for (const row of snapshots[1]) if (!invitationById.has(row.talentId)) invitationById.set(row.talentId, row);
-    filtered = all.filter(row => matchesTalent(row, filters, invitationById.get(row.id)));
+    filtered = all.filter(row => matchesTalent(row, filters, invitationById.get(row.id), scope.platform));
   }
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(filtered.length / size)));
   const rows = filtered.slice((page - 1) * size, page * size);
@@ -37,6 +37,8 @@ export async function queryInvitationData(store, scope, input) {
   return {...result, accountTotal: all.length,
     latestRecords: rows.map(row => invitationById.get(row.id)).filter(Boolean),
     sources: [...new Set(all.map(row => row.source).filter(Boolean))].sort(),
-    columns: (scope.platform === 'kuaishou' ? ['sales30d', 'sales7d'] : ['sales30d', 'settlement30d'])
+    columns: (scope.platform === 'kuaishou'
+      ? ['sales30d', 'sales7d', 'avgLiveSales30d', 'avgLiveSales7d', 'videoSales30d', 'videoSales7d']
+      : ['sales30d', 'settlement30d', 'liveSales30d', 'videoSales30d'])
       .filter(key => all.some(row => visibleMetric(row[key])))};
 }

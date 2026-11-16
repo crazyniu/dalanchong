@@ -12,11 +12,12 @@ test('invitation eligibility intersects current filters with absence of any acco
     await store.upsertTalents(other, [{id: '1', name: 'Match new other account'}]);
     const task = await store.createTask(scope, {kind: 'invite', total: 1});
     await store.reserveInvitation(scope, {talentId: '1', taskId: task.id});
-    assert.deepEqual(await store.listTalentIds(scope, {invitationStatus: 'invited'}, true), []);
+    await store.finishInvitation(scope,'1',{taskId:task.id,status:'success'});
+    assert.deepEqual(await store.listTalentIds(scope, {status:'success'}, true), []);
     assert.deepEqual(await store.listTalentIds(scope, {query: 'Match'}, true), ['2']);
-    assert.deepEqual(await store.listTalentIds(scope, {query: 'Match', invitationStatus: 'uninvited'}, true), ['2']);
+    assert.deepEqual(await store.listTalentIds(scope, {query: 'Match', status:'pending'}, true), ['2']);
     assert.deepEqual(await store.listTalentIds(other, {query: 'Match'}, true), ['1']);
-    assert.deepEqual(await store.listTalentIds(scope, {invitationStatus: 'invited'}), ['1']);
+    assert.deepEqual(await store.listTalentIds(scope, {status:'success'}), ['1']);
     assert.equal((await store.listInvitations(scope)).length, 1);
   } finally { store.close(); }
 });

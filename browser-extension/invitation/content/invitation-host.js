@@ -10,8 +10,21 @@
   const supported = () => routes[location.origin]?.includes(location.pathname) === true;
   const origin = chrome.runtime.getURL('/').replace(/\/$/, '');
   let frame = null, route = '', expectedFrame = null;
+  let lockedBody = null, previousInert = false;
+  function setCollecting(collecting) {
+    if (collecting && !lockedBody) {
+      lockedBody = document.body;
+      previousInert = lockedBody.inert;
+      lockedBody.inert = true;
+      frame.focus();
+    } else if (!collecting && lockedBody) {
+      lockedBody.inert = previousInert;
+      lockedBody = null;
+    }
+  }
   function hideRegions() { frame?.style.setProperty('clip-path', 'inset(100%)', 'important'); }
   function removeFrame() {
+    setCollecting(false);
     expectedFrame = null;
     const old = frame; frame = null;
     if (old) { old.src = 'about:blank'; old.remove(); }
@@ -44,6 +57,7 @@
       const bottom = Math.max(0, Math.min(innerHeight, rect.y + rect.height));
       if (right > left && bottom > top) rects.push(`M${left} ${top}H${right}V${bottom}H${left}Z`);
     }
+    setCollecting(value.collecting === true);
     frame.style.setProperty('clip-path', value.modal ? 'inset(0)' : rects.length ? `path('${rects.join(' ')}')` : 'inset(100%)', 'important');
   });
   scope.listen(window, 'resize', hideRegions);

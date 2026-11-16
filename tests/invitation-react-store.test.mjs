@@ -8,11 +8,11 @@ test('workspace only binds observed account and clears drafts on identity transi
  store.updateInvitationWorkspace({...input('b'),observation:input('a').observation});assert.deepEqual(store.useCommerce.getState().accounts,[]);
 });
 test('late config response cannot restore previous account data',async()=>{
- store.updateInvitationWorkspace(input('a'));let done;globalThis.chrome={runtime:{sendMessage:()=>new Promise(resolve=>done=resolve)}};
+ store.updateInvitationWorkspace(input('a'));let done;globalThis.chrome={runtime:{sendMessage:message=>message.type==='INVITE_FILTERS_GET'?Promise.resolve({ok:true,filters:null}):new Promise(resolve=>done=resolve)}};
  const pending=store.loadInvitationConfig();store.updateInvitationWorkspace(input('b'));done({ok:true,config:{...store.defaults,message:'a'}});await assert.rejects(pending,/账号已改变/);assert.deepEqual(store.useCommerce.getState().configs,{});
 });
 test('late persistent config never overwrites a draft edited while loading',async()=>{
- store.clearInvitationWorkspace();store.updateInvitationWorkspace(input('a'));let done;globalThis.chrome={runtime:{sendMessage:()=>new Promise(resolve=>done=resolve)}};
+ store.clearInvitationWorkspace();store.updateInvitationWorkspace(input('a'));let done;globalThis.chrome={runtime:{sendMessage:message=>message.type==='INVITE_FILTERS_GET'?Promise.resolve({ok:true,filters:null}):new Promise(resolve=>done=resolve)}};
  const pending=store.loadInvitationConfig();store.useCommerce.getState().saveConfig('a',{...store.defaults,message:'new draft'});done({ok:true,config:{...store.defaults,message:'old'}});await pending;assert.equal(store.useCommerce.getState().configs.a.message,'new draft');
  store.updateInvitationWorkspace({...input('a'),sessionId:'new-session'});assert.equal(store.useCommerce.getState().configs.a.message,'new draft');
 });

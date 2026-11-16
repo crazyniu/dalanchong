@@ -102,6 +102,14 @@ body {
     sans-serif;
   font-size: 14px;
 }
+.task-progress-card {
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px -2px rgb(0 0 0 / 10%);
+}
+.task-progress-card:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
 ::selection {
   background: #dbe5df;
   color: #17251e;

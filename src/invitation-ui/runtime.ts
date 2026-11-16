@@ -1,6 +1,7 @@
 /** Account-bound extension message adapter. No platform credentials or simulated results. */
-import type {CollectedTalent, InviteConfig, InviteRecord, Platform} from './types'
-import {exportRecords} from './format'
+import {platformNames, statusNames, type CollectedTalent, type InviteConfig, type InviteRecord, type Platform} from './types'
+import {exportRecords, exportText, formatTime} from './format'
+import {formatSalesAmount, salesMetricOptions, talentDeliveryLabel} from './talent-commerce'
 type Session = {sessionId:string; platform:Platform; accountId:string}
 export type Query = {kind:string; [key:string]:unknown}
 let binding: Session | null = null
@@ -37,11 +38,10 @@ async function send(token:ReturnType<typeof snapshot>, type:string, payload:Reco
 export async function invitationRequest(type:string, payload:Record<string,unknown> = {}) { return send(snapshot(),type,payload) }
 function filters(q:any) {
   if (q.kind === 'records') return {query:q.query || '',status:q.status || 'all',...(q.since ? {from:q.since}: {})}
-  const f=q.filters || {}, gender=f.choices?.gender
-  return {query:q.query || '',invitationStatus:f.status || 'all',source:f.choices?.source || '',gender:gender === '男'?'male':gender === '女'?'female':gender || 'all',minFans:f.ranges?.fans?.min ?? '',maxFans:f.ranges?.fans?.max ?? ''}
+  return {query:q.query || '',...q.filters}
 }
 function talent(row:any,s:Session):CollectedTalent { return {...row,platform:s.platform,sourceAccountId:s.accountId,name:row.name || '',source:row.source || '',collectedAt:row.collectedAt || row.updatedAt || '',gender:row.gender==='male'?'男':row.gender==='female'?'女':row.gender} }
-function storedResponse(value:unknown) {
+export function storedResponse(value:unknown) {
   if(typeof value !== 'string') return value
   try {
     const parsed=JSON.parse(value)
@@ -49,26 +49,30 @@ function storedResponse(value:unknown) {
   } catch { /* A truncated response remains readable exactly as stored. */ }
   return {path:'',body:value}
 }
-function record(row:any,s:Session):InviteRecord { return {...row,platform:s.platform,accountId:s.accountId,talentUid:row.uid,time:row.updatedAt || row.createdAt || '',...(row.response!==undefined?{response:storedResponse(row.response)}:{}),name:row.name || '',source:row.source || '',products:row.products ?? '未保存',message:row.message ?? '未保存',note:row.note || ''} }
+function record(row:any,s:Session):InviteRecord { return {...row,platform:s.platform,accountId:s.accountId,talentUid:row.uid,time:row.createdAt || row.updatedAt || '',...(row.response!==undefined?{response:storedResponse(row.response)}:{}),name:row.name || '',source:row.source || '',products:row.products ?? '未保存',message:row.message ?? '未保存',note:row.note || ''} }
 function page(rows:any[],q:any) {
   const size=Number.isSafeInteger(q.pageSize)&&q.pageSize>0?Math.min(q.pageSize,1000):20
   const current=Math.min(Math.max(1,Number.isSafeInteger(q.page)?q.page:1),Math.max(1,Math.ceil(rows.length/size)))
   return {rows:rows.slice((current-1)*size,current*size),total:rows.length,page:current}
 }
-async function exported(token:ReturnType<typeof snapshot>,q:any) {
+async function exported(token:ReturnType<typeof snapshot>,q:any):Promise<any[]> {
   const result=await send(token,'INVITE_EXPORT',{view:q.kind==='records'?'records':'talents',filters:filters(q),...(q.ids?{ids:q.ids}:{})})
   if(!Array.isArray(result.rows)) throw Error('数据响应无效')
-  return result.rows as any[]
+  return q.kind==='records' ? result.rows.map((row:any)=>({...row,accountName:result.accountName || ''})) : result.rows as any[]
 }
 async function errorLogs(token:ReturnType<typeof snapshot>) {
   const rows:any[]=[]
   for(let offset=0;;offset+=1000) {
     const result=await send(token,'INVITE_LOGS',{offset,limit:1000})
     if(!Array.isArray(result.rows)) throw Error('日志响应无效')
-    rows.push(...result.rows.filter((row:any)=>row.status==='failed'))
+    rows.push(...result.rows.filter((row:any)=>row.level==='error'||row.status==='failed'))
     if(result.rows.length<1000) break
   }
   return rows
+}
+function diagnosticLog(row:any,s:Session) {
+  return {id:row.id,time:row.createdAt,accountId:s.accountId,platform:s.platform,taskId:row.taskId,level:'error',message:row.message,
+    ...(row.response!==undefined?{response:storedResponse(row.response)}:{})}
 }
 export const invitationRuntime = {
   async queryData<T>(request:Query):Promise<T> {
@@ -89,22 +93,41 @@ export const invitationRuntime = {
         ...(q.kind==='talents'?{latestRecords:(data.latestRecords || []).map((row:any)=>record(row,s))}:{})} as T
     }
     if(q.kind==='logs') {
-      const all:any[]=[]
-      for(let offset=0;;offset+=1000) {
-        const result=await send(token,'INVITE_LOGS',{offset,limit:1000})
-        if(!Array.isArray(result.rows)) throw Error('日志响应无效')
-        all.push(...result.rows)
-        if(result.rows.length<1000) break
-      }
-      return page(all.filter(row=>row.status==='failed').map(row=>({...row,time:row.createdAt,accountId:s.accountId,platform:s.platform,level:'error'})),q) as T
+      return page((await errorLogs(token)).map(row=>diagnosticLog(row,s)),q) as T
     }
     throw Error('不支持的数据查询')
   },
   async exportData(q:any) {
     const token=snapshot(q)
-    const rows=q.kind==='logs' ? await errorLogs(token) : await exported(token,q)
+    if(q.kind==='logs') {
+      const rows=(await errorLogs(token)).map(row=>diagnosticLog(row,token.session)).reverse()
+      assertCurrent(token)
+      return {saved:rows.length>0&&exportText(rows.map(row=>JSON.stringify(row)).join('\n')+'\n','大懒虫-错误日志.ndjson','application/x-ndjson;charset=utf-8'),count:rows.length}
+    }
+    const stored=await exported(token,q)
+    let rows:object[]
+    if(q.kind==='records') rows=stored.map(value=>{
+      const row=record(value,token.session)
+      return {时间:formatTime(row.time),平台:platformNames[row.platform],账号:value.accountName,达人:row.name,达人ID:row.talentId,状态:statusNames[row.status],商品ID:row.products,话术:row.message,备注:row.note}
+    })
+    else {
+      const [{data},history]=await Promise.all([
+        send(token,'INVITE_QUERY',{query:{kind:'talents',filters:{},page:1,pageSize:1}}),
+        exported(token,{kind:'records'}),
+      ])
+      const latest=new Map<string,any>()
+      for(const row of history) if(!latest.has(row.talentId)) latest.set(row.talentId,row)
+      const options=salesMetricOptions[token.session.platform]
+      const columns=(data.columns as string[]).map(key=>options.find(option=>option.value===key)!)
+      rows=stored.map(value=>{
+        const row=talent(value,token.session), prior=latest.get(row.id)
+        return {达人:row.name,达人ID:row.id,头像:row.avatarUrl || '',最近邀约:prior?statusNames[prior.status as InviteRecord['status']]:'未邀约',性别:row.gender==='男'||row.gender==='女'?row.gender:'',
+          ...(row.platform==='douyin'?{带货类型:talentDeliveryLabel(row)}:{}),粉丝数:row.fans ?? '',
+          ...Object.fromEntries(columns.map(({value,label})=>[label,formatSalesAmount(row[value])])),来源:row.source,采集时间:formatTime(row.collectedAt)}
+      })
+    }
     assertCurrent(token)
-    const saved=await exportRecords(rows,q.kind==='logs'?'错误日志.csv':q.kind==='records'?'邀约记录.csv':'采集达人.csv')
+    const saved=await exportRecords(rows,q.kind==='records'?'邀约记录.csv':'采集达人.csv')
     return {saved,count:rows.length}
   },
   async deleteData(q:any) {
@@ -139,7 +162,7 @@ export const invitationRuntime = {
     const uid=stored.uid
     if(value.platform==='douyin'&&!uid) throw Error('缺少达人 UID，请重新采集')
     const url=value.platform==='kuaishou'
-      ? 'https://cps.kwaixiaodian.com/zone/daren-match/daren-detail?'+new URLSearchParams({promoterId:stored.id})
+      ? 'https://cps.kwaixiaodian.com/zone/daren-match/daren-detail?'+new URLSearchParams({promoterId:stored.talentId || stored.id})
       : 'https://buyin.jinritemai.com/dashboard/servicehall/daren-profile?'+new URLSearchParams({uid,enter_from:'1',scene:'1',author_type:'1'})
     assertCurrent(token); await chrome.tabs.create({url})
   },

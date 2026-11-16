@@ -4,8 +4,8 @@
  * Entry: makeApi injects one fixed page function; observations feed local collection.
  * Flow: account-page fetch and website request clients preserve current login/signing;
  * bounded response parsing feeds local records, with policy decisions from the rules API.
- * Invariants: no cookie export, arbitrary script evaluation, fabricated success or
- * automatic replay of uncertain sends. Collection and invitation remain separate.
+ * Invariants: no cookie export, arbitrary script evaluation or fabricated success.
+ * Collection and invitation remain separate; the task runner owns retries and stops.
  */
 
 import { collectionPage } from './collection-pages.mjs'
@@ -551,6 +551,12 @@ function kuaishouTalent(c, source) {
 
 function douyinTalent(row, source) {
   const c = row.author_base
+  // Main-sale labels classify the creator's primary mode; they do not assert
+  // that a live-first creator has never sold through short videos, or vice versa.
+  const deliveryType = {
+    '纯直播': 'live', '直播为主': 'live',
+    '纯短视频': 'video', '短视频为主': 'video',
+  }[row.author_sale?.main_sale_type]
   return {
     id: String(c.aweme_id || c.uid),
     uid: String(c.uid),
@@ -566,6 +572,7 @@ function douyinTalent(row, source) {
         ?.map((tag) => tag.reason)
         .join(' / ') || undefined,
     salesMode: row.author_sale?.main_sale_type || undefined,
+    deliveryTypes: deliveryType ? [deliveryType] : undefined,
     sales30d: douyinSaleRange(row.sale_info?.total_sales),
     settlement30d: douyinSaleRange(row.sale_info?.total_sales_settle),
     liveSales30d: douyinSaleRange(row.sale_info?.live_total_sales),
@@ -665,13 +672,40 @@ function collectionHasMore(source, result, page) {
   }
 }
 
+async function kuaishouSales(promoterId, request) {
+  const values = {}
+  for (const [timeRangeType, period] of [[1, '7d'], [2, '30d']]) {
+    const query = new URLSearchParams({ promoterId, timeRangeType: String(timeRangeType) })
+    const video = await request('/gateway/distribute/platform/seller/promoter/video/analysis/key/indicator?' + query)
+    values[`videoSales${period}`] = collectedAmount(video.data.totalSaleSquare)
+    const live = await request('/gateway/distribute/platform/seller/promoter/cargo/analysis/key/indicator?' + query)
+    // The page prefers its disclosed Square interval; the API also returns the
+    // original interval under avgTransactionSale. Both describe a per-live average.
+    values[`avgLiveSales${period}`] = collectedAmount(live.data.avgTransactionSaleSquare ?? live.data.avgTransactionSale)
+  }
+  return values
+}
+
 export async function collect({ platform, capture, request, stopped, progress }) {
   const source = capture.list
   if (!source) throw Error('请先在当前平台页面搜索或应用筛选')
   const unique = new Set()
+  const creatorSales = new Map()
   const append = async (batch, page, shopName) => {
-    for (const candidate of batch) unique.add(candidate.id)
     const label = shopName ? `${shopName} · 合作达人第 ${page} 页` : `采集第 ${page} 页`
+    if (platform === 'kuaishou') {
+      for (const candidate of batch) {
+        if (stopped()) break
+        if (!creatorSales.has(candidate.id))
+          creatorSales.set(candidate.id, await kuaishouSales(candidate.id, request))
+        unique.add(candidate.id)
+        await progress(unique.size, `${label} · ${unique.size} 位达人`, [{
+          ...candidate, ...creatorSales.get(candidate.id),
+        }])
+      }
+      return
+    }
+    for (const candidate of batch) unique.add(candidate.id)
     await progress(unique.size, `${label} · ${unique.size} 位达人`, batch)
   }
   let page = 1

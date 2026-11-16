@@ -1,15 +1,21 @@
-/** Render the account-scoped collected talent table, filters, selection and explicit actions. */
+/**
+ * Render the account-scoped collected-talent table and explicit actions.
+ * The authorized background owns paged IndexedDB queries, exports and mutations.
+ * Selection survives pagination; invitation preparation excludes every recorded talent.
+ * Applied filters are saved per platform/account, while search and page size are local.
+ * Platform sales columns retain their disclosed ranges and use ten-thousand-yuan labels.
+ * Missing avatars leave no slot; profile navigation preserves this dialog and tasks.
+ */
 import { memo, useDeferredValue, useMemo, useState } from 'react'
 import {
   Copy,
   Download,
   ListFilter,
   Send,
-  UserRound,
   UsersRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -25,28 +31,34 @@ import {
 import { ClearDataButton } from './clear-data-button'
 import {
   activeTalentFilterCount,
-  CollectionFilterDialog,
   emptyTalentFilters,
-  matchesTalentFilters,
   talentValue,
-} from './collection-filters'
-import { invitationRuntime as desktop } from './runtime'
+} from './collection-filter-state'
+import { CollectionFilterDialog } from './collection-filters'
+import { invitationRuntime } from './runtime'
 import { useDataQuery, type TalentsPage, type TalentScope } from './data-query'
-import { exportRecords, formatTime } from './format'
+import { formatTime } from './format'
 import { Pagination, ResultBadge, SearchInput } from './shared'
 import { useCommerce } from './store'
-import { statusNames, type CollectedTalent, type InviteRecord, type Platform } from './types'
+import { formatSalesAmount, talentDeliveryLabel, type SalesMetric } from './talent-commerce'
+import type { CollectedTalent, InviteRecord, Platform } from './types'
 
-type TalentColumn = { key: keyof CollectedTalent; label: string }
+type TalentColumn = { key: SalesMetric; label: string }
 
 const platformColumns: Record<Platform, TalentColumn[]> = {
   kuaishou: [
     { key: 'sales30d', label: '近30日合作销售额' },
     { key: 'sales7d', label: '近7日合作销售额' },
+    { key: 'avgLiveSales30d', label: '近30日直播场均销售额' },
+    { key: 'avgLiveSales7d', label: '近7日直播场均销售额' },
+    { key: 'videoSales30d', label: '近30日短视频销售额' },
+    { key: 'videoSales7d', label: '近7日短视频销售额' },
   ],
   douyin: [
     { key: 'sales30d', label: '近30日销售额' },
     { key: 'settlement30d', label: '近30日结算额' },
+    { key: 'liveSales30d', label: '近30日直播销售额' },
+    { key: 'videoSales30d', label: '近30日短视频销售额' },
   ],
 }
 
@@ -67,29 +79,15 @@ export const CollectionList = memo(function CollectionList({
   onCollect: () => void
   onView: (talent: CollectedTalent) => void
 }) {
-  const allTalents = useCommerce((s) => s.talents)
-  const records = useCommerce((s) => s.records)
-  const clearTalents = useCommerce((s) => s.clearTalents)
+  const savedFilters = useCommerce((s) => s.collectionFilters[`${platform}:${accountId}`] || emptyTalentFilters)
+  const filters = useMemo(() => platform === 'douyin'
+    ? savedFilters
+    : { ...savedFilters, choices: { gender: savedFilters.choices.gender } }, [platform, savedFilters])
+  const saveCollectionFilters = useCommerce((s) => s.saveCollectionFilters)
   const running = useCommerce((s) => s.tasks[`${accountId}:collect`]?.status === 'running' ||
     s.tasks[`${accountId}:invite`]?.status === 'running')
   const copyLabel = platform === 'kuaishou' ? '快手号' : '昵称'
-  const talents = useMemo(() => {
-    const rows = allTalents
-      .filter((talent) => talent.platform === platform && talent.sourceAccountId === accountId)
-      .map((talent) => ({
-        talent: talent.source === '达人广场 · 当前筛选'
-          ? { ...talent, source: '达人广场' }
-          : talent,
-        time: Date.parse(talent.collectedAt),
-      }))
-    rows.sort((a, b) => b.time - a.time)
-    return rows.map((row) => row.talent)
-  }, [allTalents, platform, accountId])
-  const searchFields = useMemo(() => talents.map((talent) => [
-    talent.name.toLowerCase(), talent.id.toLowerCase(), talent.source.toLowerCase(),
-  ]), [talents])
   const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState(emptyTalentFilters)
   const [filterOpen, setFilterOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -103,36 +101,24 @@ export const CollectionList = memo(function CollectionList({
   const filtering = deferredKeyword !== keyword || queryResult.loading
   const latestRecords = useMemo(() => {
     const latest = new Map<string, InviteRecord>()
-    for (const record of desktop ? queryResult.data?.latestRecords || [] : records) {
+    for (const record of queryResult.data?.latestRecords || []) {
       if (record.platform === platform && record.accountId === accountId &&
           !latest.has(record.talentId)) latest.set(record.talentId, record)
     }
     return latest
-  }, [records, platform, accountId, queryResult.data])
+  }, [platform, accountId, queryResult.data])
   const result = (id: string) => latestRecords.get(id)
-  const filtered = useMemo(() => talents.filter(
-      (t, index) =>
-        (!deferredKeyword || searchFields[index].some((value) => value.includes(deferredKeyword))) &&
-        matchesTalentFilters(t, filters, latestRecords.get(t.id)?.status || 'pending')
-    ), [talents, searchFields, deferredKeyword, filters, latestRecords])
   const selectedIds = useMemo(() => new Set(selected), [selected])
   const hasSelection = selected.length > 0
-  const actionTalents = useMemo(() => hasSelection
-    ? talents.filter((t) => selectedIds.has(t.id))
-    : filtered, [hasSelection, talents, selectedIds, filtered])
-  const total = desktop ? queryResult.data?.total || 0 : filtered.length
-  const accountTotal = desktop ? queryResult.data?.accountTotal || 0 : talents.length
+  const total = queryResult.data?.total || 0
+  const accountTotal = queryResult.data?.accountTotal || 0
   const actionCount = hasSelection ? selected.length : total
   const pages = Math.ceil(total / pageSize)
-  const current = desktop ? queryResult.data?.page || page : Math.min(page, Math.max(1, pages))
-  const displayed = desktop ? queryResult.data?.rows || [] : filtered.slice((current - 1) * pageSize, current * pageSize)
-  const columns = useMemo(() => platformColumns[platform].filter(({ key }) => desktop
-    ? queryResult.data?.columns.includes(key)
-    : talents.some((t) => talentValue(t[key]) !== '')
-  ), [platform, talents, queryResult.data])
-  const sources = useMemo(() => desktop ? queryResult.data?.sources || []
-    : [...new Set(talents.map((talent) => talent.source).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, 'zh-CN')), [talents, queryResult.data])
+  const current = queryResult.data?.page || page
+  const displayed = queryResult.data?.rows || []
+  const columns = useMemo(() => platformColumns[platform].filter(({ key }) =>
+    queryResult.data?.columns.includes(key)
+  ), [platform, queryResult.data])
   const actionScope = hasSelection ? { platform, accountId, ids: selected } : scope
   const allSelected =
     displayed.length > 0 && displayed.every((t) => selectedIds.has(t.id))
@@ -148,9 +134,7 @@ export const CollectionList = memo(function CollectionList({
   async function prepareInvite() {
     setPreparingInvite(true)
     try {
-      const ids = desktop
-        ? await desktop.queryData<string[]>({ kind: 'invite_ids', ...actionScope })
-        : actionTalents.filter((talent) => !latestRecords.has(talent.id)).map((talent) => talent.id)
+      const ids = await invitationRuntime.queryData<string[]>({ kind: 'invite_ids', ...actionScope })
       if (!ids.length) {
         toast.info('没有无邀约记录的达人')
         return
@@ -165,30 +149,8 @@ export const CollectionList = memo(function CollectionList({
   async function exportCSV() {
     setExporting(true)
     try {
-      if (desktop) {
-        const { saved, count } = await desktop.exportData({ kind: 'talents', ...actionScope })
-        if (saved) toast.success(`已导出 ${count} 位达人`)
-        return
-      }
-      const saved = await exportRecords(
-        actionTalents.map((t) => {
-          const record = result(t.id)
-          return {
-            达人: t.name,
-            达人ID: t.id,
-            头像: t.avatarUrl ?? '',
-            最近邀约: record ? statusNames[record.status] : '未邀约',
-            粉丝数: talentValue(t.fans),
-            ...Object.fromEntries(
-              columns.map(({ key, label }) => [label, talentValue(t[key])])
-            ),
-            来源: t.source,
-            采集时间: formatTime(t.collectedAt),
-          }
-        }),
-        '采集达人.csv'
-      )
-      if (saved) toast.success(`已导出 ${actionTalents.length} 位达人`)
+      const { saved, count } = await invitationRuntime.exportData({ kind: 'talents', ...actionScope })
+      if (saved) toast.success(`已导出 ${count} 位达人`)
     } catch (e) {
       toast.error(`导出失败：${(e as Error).message}`)
     } finally {
@@ -241,11 +203,10 @@ export const CollectionList = memo(function CollectionList({
             }
             disabled={!accountTotal || running}
             onClear={async () => {
-              if (desktop) await desktop.deleteData({
+              await invitationRuntime.deleteData({
                 kind: 'talents', platform, accountId,
                 ...(hasSelection ? { ids: selected } : {}),
               })
-              else await clearTalents(platform, accountId, hasSelection ? selected : undefined)
               onSelect([])
               setPage(1)
             }}
@@ -254,15 +215,15 @@ export const CollectionList = memo(function CollectionList({
       </div>
       {filterOpen && (
         <CollectionFilterDialog
+          platform={platform}
           open={filterOpen}
           onOpenChange={setFilterOpen}
           filters={filters}
           onApply={(next) => {
-            setFilters(next)
+            saveCollectionFilters(platform, accountId, next)
             setPage(1)
             setFilterOpen(false)
           }}
-          sources={sources}
         />
       )}
       {hasSelection && (
@@ -293,6 +254,8 @@ export const CollectionList = memo(function CollectionList({
                 达人
               </TableHead>
               <TableHead>最近邀约</TableHead>
+              <TableHead>性别</TableHead>
+              {platform === 'douyin' && <TableHead>带货类型</TableHead>}
               <TableHead>粉丝数</TableHead>
               {columns.map(({ key, label }) => (
                 <TableHead key={key}>{label}</TableHead>
@@ -329,12 +292,11 @@ export const CollectionList = memo(function CollectionList({
                   </TableCell>
                   <TableCell className='sticky left-12 z-10 bg-background group-hover:bg-muted group-data-[state=selected]:bg-muted'>
                     <div className='flex items-center gap-3'>
-                      <Avatar className='size-10'>
-                        <AvatarImage src={t.avatarUrl} alt={`${t.name}的头像`} />
-                        <AvatarFallback>
-                          <UserRound className='size-5 text-muted-foreground' />
-                        </AvatarFallback>
-                      </Avatar>
+                      {t.avatarUrl && (
+                        <Avatar className='size-10 empty:hidden'>
+                          <AvatarImage src={t.avatarUrl} alt={`${t.name}的头像`} />
+                        </Avatar>
+                      )}
                       <div
                         className={
                           platform === 'douyin'
@@ -399,6 +361,10 @@ export const CollectionList = memo(function CollectionList({
                       </Badge>
                     )}
                   </TableCell>
+                  <TableCell>{t.gender === '男' || t.gender === '女' ? t.gender : '—'}</TableCell>
+                  {platform === 'douyin' && (
+                    <TableCell className='whitespace-nowrap'>{talentDeliveryLabel(t) || '—'}</TableCell>
+                  )}
                   <TableCell className='tabular-nums'>
                     {typeof fans !== 'number'
                       ? '—'
@@ -407,18 +373,14 @@ export const CollectionList = memo(function CollectionList({
                         : fans.toLocaleString()}
                   </TableCell>
                   {columns.map(({ key }) => {
-                    const value = talentValue(t[key])
+                    const value = formatSalesAmount(t[key])
                     return (
                       <TableCell key={key} className='tabular-nums'>
                         <span
                           className='block max-w-60 truncate'
                           title={String(value)}
                         >
-                          {value === ''
-                            ? '—'
-                            : typeof value === 'number'
-                              ? value.toLocaleString()
-                              : value}
+                          {value || '—'}
                         </span>
                       </TableCell>
                     )

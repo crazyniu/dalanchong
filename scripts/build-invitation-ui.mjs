@@ -6,6 +6,7 @@ import { readFile, mkdir, copyFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
+await writeFile(path.join(root, 'browser-extension/shared/build-mode.js'), 'export const testLicense = null;\n');
 const result = await build({
   absWorkingDir: root,
   entryPoints: ['src/invitation-ui/entry.tsx'],

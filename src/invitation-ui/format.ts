@@ -11,9 +11,12 @@ export async function exportRecords(rows: object[], filename: string) {
   for (const row of rows) {
     lines.push(cols.map((column) => cell((row as Record<string, unknown>)[column])).join(','))
   }
-  const text = '\uFEFF' + lines.join('\r\n')
+  return exportText('\uFEFF' + lines.join('\r\n'),filename,'text/csv;charset=utf-8')
+}
+
+export function exportText(text:string,filename:string,type:string) {
   const url = URL.createObjectURL(
-    new Blob([text], { type: 'text/csv;charset=utf-8' })
+    new Blob([text], { type })
   )
   const a = document.createElement('a')
   a.href = url

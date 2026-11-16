@@ -1,7 +1,21 @@
-/** Local-only list filtering; no platform requests, authorization or data transmission. */
-export function normalizedFilters(input = {}, records = false) {
+/** Account-local filters use the captured platform values and disclosed amount ranges. */
+const salesMetrics = {
+  kuaishou: ['sales30d', 'sales7d', 'avgLiveSales30d', 'avgLiveSales7d', 'videoSales30d', 'videoSales7d'],
+  douyin: ['sales30d', 'liveSales30d', 'videoSales30d', 'settlement30d'],
+};
+function bounds(input, label) {
+  const result = {min: input?.min ?? '', max: input?.max ?? ''};
+  for (const value of Object.values(result)) {
+    if (typeof value !== 'string' || (value !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0)))
+      throw new Error(`${label}范围无效`);
+  }
+  if (result.min !== '' && result.max !== '' && Number(result.min) > Number(result.max))
+    throw new Error(`${label}最小值不能大于最大值`);
+  return result;
+}
+export function normalizedFilters(input = {}, records = false, platform) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('筛选条件无效');
-  const result = {query: String(input.query || '').trim().toLocaleLowerCase().slice(0, 200)};
+  const result = {query: String(input.query || '').trim().toLowerCase().slice(0, 200)};
   if (records) {
     result.status = input.status || 'all';
     if (!['all', 'sending', 'success', 'failed', 'skipped', 'review'].includes(result.status)) throw new Error('记录状态无效');
@@ -11,38 +25,70 @@ export function normalizedFilters(input = {}, records = false) {
       result[key] = value;
     }
     if (result.from !== undefined && result.to !== undefined && result.from > result.to) throw new Error('开始日期不能晚于结束日期');
-  } else {
-    result.invitationStatus = input.invitationStatus || 'all'; result.gender = input.gender || 'all';
-    if (!['all', 'invited', 'uninvited', 'pending', 'success', 'failed', 'review', 'skipped', 'sending'].includes(result.invitationStatus) || !['all', 'male', 'female', 'unknown'].includes(result.gender)) throw new Error('达人筛选无效');
-    // Source options come directly from stored labels: preserve their exact value.
-    result.source = String(input.source || '');
-    if (result.source.length > 500) throw new Error('采集来源无效');
-    for (const key of ['minFans', 'maxFans']) if (input[key] !== undefined && input[key] !== '') {
-      if (!Number.isFinite(Number(input[key])) || Number(input[key]) < 0) throw new Error('粉丝范围无效');
-      result[key] = Number(input[key]);
-    }
-    if (result.minFans !== undefined && result.maxFans !== undefined && result.minFans > result.maxFans) throw new Error('粉丝最小值不能大于最大值');
+    return result;
+  }
+  result.status = input.status || 'all';
+  if (!['all', 'pending', 'success'].includes(result.status)) throw new Error('邀约状态无效');
+  result.choices = {};
+  const gender = input.choices?.gender;
+  if (gender) {
+    if (!['男', '女'].includes(gender)) throw new Error('达人性别无效');
+    result.choices.gender = gender;
+  }
+  const deliveryType = input.choices?.deliveryType;
+  if (platform === 'douyin' && deliveryType) {
+    if (!['live', 'video'].includes(deliveryType)) throw new Error('带货类型无效');
+    result.choices.deliveryType = deliveryType;
+  }
+  result.ranges = {};
+  if (input.ranges?.fans) result.ranges.fans = bounds(input.ranges.fans, '粉丝数');
+  if (input.gmv) {
+    if (!salesMetrics[platform].includes(input.gmv.metric)) throw new Error('销售额口径无效');
+    result.gmv = {metric: input.gmv.metric, ...bounds(input.gmv, '金额')};
   }
   return result;
 }
-export function matchesTalent(row, filters, invitation) {
-  const query = filters.query;
-  if (query && ![row.name, row.id, row.uid, row.source].some(value => String(value || '').toLocaleLowerCase().includes(query))) return false;
-  if (filters.invitationStatus === 'invited' && !invitation || filters.invitationStatus === 'uninvited' && invitation) return false;
-  // Presence filters and outcome filters are distinct: pending has no record; success is confirmed.
-  if (filters.invitationStatus === 'pending' && invitation) return false;
-  if (['success', 'failed', 'review', 'skipped', 'sending'].includes(filters.invitationStatus) && invitation?.status !== filters.invitationStatus) return false;
-  const gender = ['male', '男', 1].includes(row.gender) ? 'male' : ['female', '女', 2].includes(row.gender) ? 'female' : 'unknown';
-  if (filters.gender !== 'all' && filters.gender !== gender) return false;
-  if (filters.source && String(row.source || '') !== filters.source) return false;
-  if (filters.minFans !== undefined && (!Number.isFinite(row.fans) || row.fans < filters.minFans)) return false;
-  if (filters.maxFans !== undefined && (!Number.isFinite(row.fans) || row.fans > filters.maxFans)) return false;
+function salesRange(value) {
+  if (value == null) return undefined;
+  const text = value.trim().replace(/^[¥￥]/, '').replace(/[,，\s]/g, '');
+  const match = text.match(/^(\d+(?:\.\d+)?)([万亿]?)(?:[-~～至–—](\d+(?:\.\d+)?)([万亿]?))?(\+)?$/);
+  if (!match || (match[3] != null && match[5])) return undefined;
+  const multiplier = unit => unit === '亿' ? 100_000_000 : unit === '万' ? 10_000 : 1;
+  const lower = Number(match[1]), upper = match[3] == null ? lower : Number(match[3]);
+  const lowerUnit = match[2] || (match[4] && lower <= upper ? match[4] : '');
+  const min = lower * multiplier(lowerUnit);
+  const max = match[5] ? null : upper * multiplier(match[3] == null ? lowerUnit : match[4]);
+  if (!Number.isFinite(min) || (max != null && (!Number.isFinite(max) || min > max))) return undefined;
+  return {min, max};
+}
+export function matchesTalent(row, filters, invitation, platform) {
+  if (filters.query && ![row.name, row.id, row.source].some(value => String(value || '').toLowerCase().includes(filters.query))) return false;
+  if (filters.status !== 'all' && filters.status !== (invitation?.status || 'pending')) return false;
+  const gender = ['male', '男', 1].includes(row.gender) ? '男' : ['female', '女', 2].includes(row.gender) ? '女' : '';
+  if (filters.choices.gender && filters.choices.gender !== gender) return false;
+  if (platform === 'douyin' && filters.choices.deliveryType) {
+    const primary = {'纯直播': 'live', '直播为主': 'live', '纯短视频': 'video', '短视频为主': 'video'}[row.salesMode];
+    const deliveryTypes = row.deliveryTypes?.length ? row.deliveryTypes : primary ? [primary] : [];
+    if (!deliveryTypes.includes(filters.choices.deliveryType)) return false;
+  }
+  const fans = filters.ranges.fans;
+  if (fans && (fans.min !== '' || fans.max !== '')) {
+    if (!Number.isFinite(row.fans) ||
+        (fans.min !== '' && row.fans < Number(fans.min)) ||
+        (fans.max !== '' && row.fans > Number(fans.max))) return false;
+  }
+  const gmv = filters.gmv;
+  if (gmv && (gmv.min !== '' || gmv.max !== '')) {
+    const range = salesRange(row[gmv.metric]);
+    if (!range || (gmv.min !== '' && range.min < Number(gmv.min)) ||
+        (gmv.max !== '' && (range.max == null || range.max > Number(gmv.max)))) return false;
+  }
   return true;
 }
 export function matchesRecord(row, filters) {
-  if (filters.query && ![row.talentId, row.name, row.note].some(value => String(value || '').toLocaleLowerCase().includes(filters.query))) return false;
+  if (filters.query && ![row.talentId, row.name, row.note].some(value => String(value || '').toLowerCase().includes(filters.query))) return false;
   if (filters.status !== 'all' && row.status !== filters.status) return false;
-  const time = Date.parse(row.updatedAt || row.createdAt);
+  const time = Date.parse(row.createdAt || row.updatedAt);
   if (filters.from !== undefined && (!Number.isFinite(time) || time < filters.from)) return false;
   if (filters.to !== undefined && (!Number.isFinite(time) || time > filters.to)) return false;
   return true;

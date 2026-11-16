@@ -59,7 +59,7 @@ export function initializeLicense() {
   if (!initialization) initialization = (async () => {
     try { await inviteLicense.initialize(); }
     finally { await publishLicenseState(); }
-    await chrome.alarms.create(ALARM, {periodInMinutes: 10});
+    await chrome.alarms.create(ALARM, {periodInMinutes: 8});
     watchdog = setInterval(() => { void publishLicenseState(); }, 1000);
     return licenseStatus();
   })().catch(error => { initialization = undefined; throw error; });

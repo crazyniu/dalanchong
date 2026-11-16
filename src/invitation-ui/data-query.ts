@@ -1,7 +1,12 @@
+/**
+ * Bind mounted invitation views to authorized background queries.
+ * Revisions schedule one query at a time; newer requests replace pending work.
+ * Responses cannot publish for a different request identity or after unmount.
+ */
 import { useEffect, useRef, useState } from 'react'
-import { invitationRuntime as desktop } from './runtime'
+import { invitationRuntime } from './runtime'
 import { useCommerce } from './store'
-import type { TalentFilters } from './collection-filters'
+import type { TalentFilters } from './collection-filter-state'
 import type { CollectedTalent, DiagnosticLog, InviteRecord, Platform } from './types'
 
 export type DataQuery = { kind: string; [key: string]: unknown }
@@ -23,7 +28,6 @@ export type TalentsPage = {
   accountTotal: number
   page: number
   latestRecords: InviteRecord[]
-  sources: string[]
   columns: string[]
 }
 export type RecordsPage = { rows: InviteRecord[]; total: number; page: number }
@@ -39,8 +43,7 @@ export function useDataQuery<T>(request: DataQuery, enabled = true) {
     current?: PendingQuery
   }>({ running: false })
   useEffect(() => {
-    if (!desktop || !enabled) return
-    const backend = desktop
+    if (!enabled) return
     const currentQueue = queue.current
     const pending = { key }
     currentQueue.current = pending
@@ -53,7 +56,7 @@ export function useDataQuery<T>(request: DataQuery, enabled = true) {
           const current = currentQueue.pending
           currentQueue.pending = undefined
           try {
-            const data = await backend.queryData<T>(JSON.parse(current.key))
+            const data = await invitationRuntime.queryData<T>(JSON.parse(current.key))
             if (currentQueue.current?.key === current.key)
               setResult({ key: current.key, data, error: '' })
           } catch (error) {
@@ -77,7 +80,7 @@ export function useDataQuery<T>(request: DataQuery, enabled = true) {
   const current = enabled && result?.key === key ? result : undefined
   return {
     data: current?.data,
-    loading: Boolean(desktop && enabled && !current),
+    loading: Boolean(enabled && !current),
     error: current?.error || '',
   }
 }

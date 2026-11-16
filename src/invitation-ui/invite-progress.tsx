@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { PlatformIcon } from './shared'
 import type { Platform, Task } from './types'
-import type { BrowserInstallState } from './progress-types'
 
 type InviteProgressTask = Pick<Task,
   'accountId' | 'startedAt' | 'processed' | 'total' | 'success' |
@@ -16,11 +15,6 @@ export type InviteProgressState = {
 }
 
 export type InviteProgressAction = { type: 'stop'; accountId: string }
-
-export type TaskOverlayContent =
-  | { kind: 'collect'; task: Task; browserInstall?: BrowserInstallState | null }
-  | ({ kind: 'invite'; browserInstall?: BrowserInstallState | null } & InviteProgressState)
-  | { kind: 'browser-install'; state: BrowserInstallState }
 
 export function InviteProgress({
   state,
@@ -66,7 +60,7 @@ export function InviteProgress({
       aria-label='邀约进度'
       data-slot='invite-progress'
       className={cn(
-        'absolute right-4 bottom-4 z-30 w-[380px] max-w-[calc(100%-2rem)] rounded-xl bg-background text-foreground shadow-[0_8px_32px_-8px_rgb(15_23_42/0.3)]',
+        'task-progress-card absolute right-4 bottom-4 z-30 w-[380px] max-w-[calc(100%-2rem)] rounded-xl bg-background text-foreground',
         className
       )}
     >

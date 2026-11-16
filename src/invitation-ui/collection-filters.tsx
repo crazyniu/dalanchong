@@ -1,4 +1,4 @@
-/** Edit local talent filters without changing platform-side filters. */
+/** Edit invitation status, gender, delivery type, sales and fan filters. */
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,74 +10,32 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Choice } from './shared'
-import type { CollectedTalent } from './types'
-
-export type TalentFilters = {
-  status: 'all' | 'pending' | 'success'
-  choices: { source?: string; gender?: '男' | '女' | 'unknown' }
-  ranges: { fans?: { min: string; max: string } }
-}
-
-export const emptyTalentFilters: TalentFilters = {
-  status: 'all',
-  choices: {},
-  ranges: {},
-}
-
-export function talentValue(
-  value: CollectedTalent[keyof CollectedTalent]
-): string | number {
-  if (Array.isArray(value)) return value.join(' / ')
-  if (typeof value === 'number') return Number.isFinite(value) ? value : ''
-  if (value == null) return ''
-  const text = value.trim()
-  return /^(?:[¥￥]\s*)?(?:[-—–]+|NaN)$/i.test(text) ? '' : text
-}
-
-export function matchesTalentFilters(
-  talent: CollectedTalent,
-  filters: TalentFilters,
-  status: string
-) {
-  if (filters.status !== 'all' && filters.status !== status) return false
-  if (filters.choices.source && talent.source !== filters.choices.source) return false
-  const gender = talent.gender === '男' || talent.gender === '女' ? talent.gender : 'unknown'
-  if (filters.choices.gender && gender !== filters.choices.gender) return false
-  const { min, max } = filters.ranges.fans || { min: '', max: '' }
-  if (min === '' && max === '') return true
-  const fans = talentValue(talent.fans)
-  return (
-    typeof fans === 'number' &&
-    (min === '' || fans >= Number(min)) &&
-    (max === '' || fans <= Number(max))
-  )
-}
-
-export function activeTalentFilterCount(filters: TalentFilters) {
-  const { min, max } = filters.ranges.fans || { min: '', max: '' }
-  return (
-    Number(filters.status !== 'all') +
-    Number(Boolean(filters.choices.source)) +
-    Number(Boolean(filters.choices.gender)) +
-    Number(min !== '' || max !== '')
-  )
-}
+import { salesMetricOptions, type SalesMetric } from './talent-commerce'
+import type { Platform } from './types'
+import { emptyTalentFilters, type TalentFilters } from './collection-filter-state'
 
 export function CollectionFilterDialog({
   open,
   onOpenChange,
   filters,
   onApply,
-  sources,
+  platform,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   filters: TalentFilters
   onApply: (filters: TalentFilters) => void
-  sources: string[]
+  platform: Platform
 }) {
   const [draft, setDraft] = useState(filters)
   const fans = draft.ranges.fans || { min: '', max: '' }
+  const gmv = draft.gmv || { metric: 'sales30d', min: '', max: '' }
+  function setGmv(changes: Partial<NonNullable<TalentFilters['gmv']>>) {
+    setDraft((current) => ({
+      ...current,
+      gmv: { metric: 'sales30d', min: '', max: '', ...current.gmv, ...changes },
+    }))
+  }
   function setFans(bound: 'min' | 'max', value: string) {
     setDraft((current) => ({
       ...current,
@@ -168,33 +126,68 @@ export function CollectionFilterDialog({
                   { value: '__all__', label: '全部' },
                   { value: '男', label: '男' },
                   { value: '女', label: '女' },
-                  { value: 'unknown', label: '未知' },
                 ]}
               />
             </div>
-            {sources.length > 0 && (
-              <div className='space-y-2'>
-                <div className='text-sm font-medium'>采集来源</div>
-                <Choice
-                  label='采集来源'
-                  className='w-full'
-                  value={draft.choices.source || '__all__'}
-                  onChange={(source) =>
-                    setDraft((current) => ({
-                      ...current,
-                      choices: {
-                        ...current.choices,
-                        source: source === '__all__' ? '' : source,
-                      },
-                    }))
-                  }
-                  options={[
-                    { value: '__all__', label: '全部' },
-                    ...sources.map((source) => ({ value: source, label: source })),
-                  ]}
-                />
+            {platform === 'douyin' && <div className='space-y-2'>
+              <div className='text-sm font-medium'>带货类型</div>
+              <Choice
+                label='带货类型'
+                className='w-full'
+                value={draft.choices.deliveryType || '__all__'}
+                onChange={(deliveryType) => setDraft((current) => ({
+                  ...current,
+                  choices: {
+                    ...current.choices,
+                    deliveryType: deliveryType === '__all__'
+                      ? undefined
+                      : deliveryType as TalentFilters['choices']['deliveryType'],
+                  },
+                }))}
+                options={[
+                  { value: '__all__', label: '全部' },
+                  { value: 'live', label: '直播带货' },
+                  { value: 'video', label: '短视频带货' },
+                ]}
+              />
+            </div>}
+            <div className='space-y-2 sm:col-span-2'>
+              <div className='text-sm font-medium'>
+                {platform === 'kuaishou' ? '近期销售额' : '近期 GMV / 结算额'}
               </div>
-            )}
+              <div className='grid gap-2 sm:grid-cols-2'>
+                <Choice
+                  label='销售额口径'
+                  className='w-full'
+                  value={gmv.metric}
+                  onChange={(metric) => setGmv({ metric: metric as SalesMetric })}
+                  options={salesMetricOptions[platform]}
+                />
+                <div className='flex items-center gap-2'>
+                  <Input
+                    type='number'
+                    min={0}
+                    max={gmv.max || undefined}
+                    step='0.01'
+                    aria-label='金额最小值（元）'
+                    placeholder='最小值（元）'
+                    value={gmv.min}
+                    onChange={(event) => setGmv({ min: event.target.value })}
+                  />
+                  <span className='text-muted-foreground'>至</span>
+                  <Input
+                    type='number'
+                    min={gmv.min || 0}
+                    step='0.01'
+                    aria-label='金额最大值（元）'
+                    placeholder='最大值（元）'
+                    value={gmv.max}
+                    onChange={(event) => setGmv({ max: event.target.value })}
+                  />
+                </div>
+              </div>
+              <p className='text-sm text-muted-foreground'>金额区间须完整落在所填范围内，缺失数据不匹配。</p>
+            </div>
           </div>
           <DialogFooter className='border-t px-6 py-4'>
             <Button

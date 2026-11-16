@@ -11,7 +11,7 @@ import {makeApi, classifyObservedRequest, interpretObservedResponse} from '../co
 import {licenseEpoch, requireLicense} from '../../background/license-background.js';
 import {readObservation, markOwnObservation, releaseOwnObservation} from './invite-observation.js';
 
-export function createInvitationConnection(session, license, scope) {
+export function createInvitationConnection(session, license, scope, onSend = () => {}) {
   const assertIdentity = async expectedScope => {
     let snapshot;
     try { snapshot = await readObservation(session); snapshot.account = await refreshInvitationIdentity(session); }
@@ -37,13 +37,20 @@ export function createInvitationConnection(session, license, scope) {
       try {
         beforeDispatch();
         requireLicense(epoch);
-        const results = await chrome.scripting.executeScript({
-          target: {tabId: session.tabId, documentIds: [session.chromeDocumentId]},
-          world: 'MAIN', func, args: [...args, session.pageUrl],
-        });
-        const result = results.find(item => item.frameId === 0 && item.documentId === session.chromeDocumentId);
-        if (!result || result.error) throw new Error('平台请求结果不可确认');
-        return result.result;
+        const sending = path === '/distribute/pc/seller/invite/seller/create' || path === '/connection/pc/im/invite/card/send';
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: {tabId: session.tabId, documentIds: [session.chromeDocumentId]},
+            world: 'MAIN', func, args: [...args, session.pageUrl],
+          });
+          const result = results.find(item => item.frameId === 0 && item.documentId === session.chromeDocumentId);
+          if (!result || result.error) throw new Error('平台请求结果不可确认');
+          if (sending && !result.result.beforeSend) onSend();
+          return result.result;
+        } catch (error) {
+          if (sending && !error.beforeSend) onSend();
+          throw error;
+        }
       } finally {
         // A cleanup failure after a successful send must not convert it into a retry.
         if (handle) await releaseOwnObservation(session, handle).catch(() => {});

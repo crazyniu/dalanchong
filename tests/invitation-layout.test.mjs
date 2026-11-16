@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {invitationLayout} from '../src/invitation-ui/layout.js';
 const rect={x:5,y:6,width:380,height:200};
 test('dialog, sheet and alert overlays request full viewport',()=>{
- assert.deepEqual(invitationLayout({querySelector(selector){assert.match(selector,/alert-dialog-overlay/);return {};}}),{type:'INVITATION_LAYOUT',modal:true,rects:[]});
+ assert.deepEqual(invitationLayout({querySelector(selector){if(selector==='[data-collection-mask]')return null;assert.match(selector,/alert-dialog-overlay/);return {};}}),{type:'INVITATION_LAYOUT',modal:true,collecting:false,rects:[]});
+});
+test('collection locks the platform viewport while keeping the toolbar interactive',()=>{
+ assert.deepEqual(invitationLayout({querySelector:()=>({})}),{type:'INVITATION_LAYOUT',modal:true,collecting:true,rects:[]});
 });
 test('actual progress/log/menu/toast surfaces are measured and zero-sized wrappers ignored',()=>{
  const result=invitationLayout({querySelector:()=>null,querySelectorAll(selector){

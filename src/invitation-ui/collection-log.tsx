@@ -60,7 +60,7 @@ export function CollectionLog({ task }: { task: Task }) {
     return (
       <Button
         variant='secondary'
-        className='dark absolute right-4 bottom-4 z-30 border border-border bg-background/75 text-foreground shadow-lg backdrop-blur-md hover:bg-background/85'
+        className='task-progress-card dark absolute right-4 bottom-4 z-30 bg-background/75 text-foreground backdrop-blur-md hover:bg-background/85'
         aria-label='展开采集记录'
         onClick={() => setCollapsed(false)}
       >
@@ -71,7 +71,7 @@ export function CollectionLog({ task }: { task: Task }) {
 
   return (
     <Card
-      className='dark absolute right-4 bottom-4 z-30 w-[440px] max-w-[calc(100%_-_32px)] gap-0 overflow-hidden border-border bg-background/75 py-0 text-foreground shadow-xl backdrop-blur-md'
+      className='task-progress-card dark absolute right-4 bottom-4 z-30 w-[440px] max-w-[calc(100%_-_32px)] gap-0 overflow-hidden bg-background/75 py-0 text-foreground backdrop-blur-md'
       data-testid='collection-log'
     >
       <CardHeader className='flex flex-row items-center gap-3 border-b border-border px-3 py-3'>

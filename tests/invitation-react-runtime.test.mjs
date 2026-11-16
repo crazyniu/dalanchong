@@ -33,7 +33,7 @@ test('unselected invitation uses exact current filters plus historical exclusion
  bind(session);let last;globalThis.chrome={runtime:{sendMessage:async msg=>{last=msg;return {ok:true,ids:[]}}}};
  await r.queryData({kind:'invite_ids',query:'match',filters:{status:'success'}});
  assert.equal(last.excludeInvited,true);assert.equal(last.filters.query,'match');
- assert.equal(last.filters.invitationStatus,'success');
+ assert.equal(last.filters.status,'success');
 });
 test('persisted complete and truncated response strings are preserved as readable bodies',async()=>{
  bind(session);

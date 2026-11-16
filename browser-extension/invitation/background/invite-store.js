@@ -12,7 +12,7 @@
  * claims must own cross-device exclusivity before any cross-device sending is enabled.
  * Recovery: the sole task owner calls recover once after losing its previous session,
  * before starting work. Never call it from a second UI while another owner is active.
- * Recovery stops tasks and marks uncertain sends review; it never queues a resend.
+ * Recovery stops tasks and marks uncertain sends review; the active runner owns retries.
  */
 import {normalizedFilters, matchesTalent, matchesRecord} from '../shared/invite-filter.js';
 const DATABASE = 'dalanchong-invitations';
@@ -57,10 +57,15 @@ function talentFields(input) {
     }
   }
   for (const key of ['source', 'region', 'level', 'contentType', 'salesMode', 'sales7d', 'sales30d',
-    'settlement30d', 'liveSales30d', 'videoSales30d', 'imageTextSales30d', 'windowSales30d',
+    'settlement30d', 'liveSales30d', 'avgLiveSales7d', 'avgLiveSales30d', 'videoSales7d', 'videoSales30d', 'imageTextSales30d', 'windowSales30d',
     'avgLiveSales', 'avgVideoSales', 'cooperationLevel', 'replyRate']) {
     if (typeof input[key] === 'string' || typeof input[key] === 'number')
       result[key] = String(input[key]).slice(0, 500);
+  }
+  if (Array.isArray(input.categories)) result.categories = [...input.categories];
+  if (input.deliveryTypes !== undefined) {
+    if (!Array.isArray(input.deliveryTypes) || input.deliveryTypes.some(value => !['live', 'video'].includes(value))) throw new Error('带货类型无效');
+    result.deliveryTypes = [...new Set(input.deliveryTypes)];
   }
   if (typeof input.avatarUrl === 'string') {
     const avatar = new URL(input.avatarUrl);
@@ -85,6 +90,7 @@ function safeDetail(value) {
 function publicRow(row) {
   if (!row) return null;
   const {scope, ...value} = row;
+  if (value.source === '达人广场 · 当前筛选') value.source = '达人广场';
   return value;
 }
 
@@ -155,20 +161,21 @@ export async function openInviteStore() {
     const key = scopeKey(scope), {offset = 0, limit = 100} = options;
     count(offset, '偏移量'); count(limit, '每页数量');
     if (!all && (!limit || limit > 1000)) throw new Error('每页数量应为 1–1000');
-    const filters = normalizedFilters(options.filters, records);
+    const filters = normalizedFilters(options.filters, records, scope.platform);
     return transaction(db, ['talents', 'invitations'], 'readonly', (tx, done, on) => {
       const invitations = new Map(), result = [];
       on(tx.objectStore('invitations').index('scope').getAll(IDBKeyRange.only(key)), rows => {
         for (const row of rows) invitations.set(row.talentId, row);
         const finish = talents => {
           for (const row of (records ? rows : talents)) {
-            if (!(records ? matchesRecord(row, filters) : matchesTalent(row, filters, invitations.get(row.id)))) continue;
+            if (!(records ? matchesRecord(row, filters) : matchesTalent(row, filters, invitations.get(row.id), scope.platform))) continue;
             if (!records && options.excludeInvited === true && invitations.has(row.id)) continue;
             const item = publicRow(row);
             if (!records) item.invitationStatus = invitations.get(row.id)?.status || '';
             result.push(item);
           }
-          result.sort((a, b) => Date.parse(b.updatedAt || b.collectedAt || b.createdAt) - Date.parse(a.updatedAt || a.collectedAt || a.createdAt));
+          const time = row => Date.parse(records ? row.createdAt || row.updatedAt : row.collectedAt || row.updatedAt);
+          result.sort((a, b) => time(b) - time(a));
           done(all ? (records ? result : result.slice(0, 10000)) : result.slice(offset, offset + limit));
         };
         if (records) finish([]);
@@ -199,7 +206,9 @@ export async function openInviteStore() {
       const row = {scope: key, id: `${Date.now()}-${crypto.randomUUID()}`, taskId,
         createdAt: new Date().toISOString(), message: safeDetail(input.message || '').slice(0, 1000),
         ...(input.talentId ? {talentId: identifier(input.talentId, '达人 ID')} : {}),
-        ...(input.status ? {status: String(input.status).slice(0, 50)} : {})};
+        ...(input.status ? {status: String(input.status).slice(0, 50)} : {}),
+        ...(input.level ? {level: enumValue(input.level, ['info', 'success', 'error'], '日志级别')} : {}),
+        ...(input.response ? {response: safeDetail(input.response)} : {})};
       return transaction(db, ['tasks', 'logs'], 'readwrite', (tx, done, on) =>
         on(tx.objectStore('tasks').get([key, taskId]), task => {
           if (!task) throw new Error('任务不存在');
@@ -220,6 +229,18 @@ export async function openInviteStore() {
             done(deleted);
           });
         });
+      });
+    },
+    getCollectionFilters(scope) {
+      const key = scopeKey(scope);
+      return transaction(db, ['profiles'], 'readonly', (tx, done, on) =>
+        on(tx.objectStore('profiles').get([key, 'collection-filters']), row => done(row?.filters || null)));
+    },
+    saveCollectionFilters(scope, input) {
+      const key = scopeKey(scope);
+      const {query, ...filters} = normalizedFilters(input, false, scope.platform);
+      return transaction(db, ['profiles'], 'readwrite', (tx, done) => {
+        tx.objectStore('profiles').put({scope: key, id: 'collection-filters', filters}); done(filters);
       });
     },
     getConfig(scope) {
@@ -248,14 +269,12 @@ export async function openInviteStore() {
         const records = tx.objectStore('invitations');
         on(records.get([key, talentId]), row => {
           if (!row || row.status !== 'review') throw new Error('仅待核实记录可人工确认');
-          on(tx.objectStore('tasks').get([key, row.taskId]), task => {
-            if (task?.status === 'running') throw new Error('请先停止任务');
-            if (result === 'not-sent') { records.delete([key, talentId]); done({removed: true}); }
-            else {
-              const next = {...row, status: 'success', manuallyVerified: true,
-                note: '用户已在平台核实发送成功', updatedAt: new Date().toISOString()};
-              records.put(next); done(publicRow(next));
-            }
+          on(tx.objectStore('tasks').index('scope').getAll(IDBKeyRange.only(key)), tasks => {
+            if (tasks.some(task => task.status === 'running')) throw new Error('请先停止该账号的任务');
+            const sent = result === 'success';
+            const next = {...row, status: sent ? 'success' : 'skipped',
+              note: sent ? '人工确认已邀约' : '人工确认未邀约', resolution: new Date().toISOString()};
+            records.put(next); done(publicRow(next));
           });
         });
       });
@@ -299,13 +318,16 @@ export async function openInviteStore() {
       const rows = [...unique.values()], now = new Date().toISOString();
       return transaction(db, ['talents'], 'readwrite', (tx, done, on) => {
         const store = tx.objectStore('talents');
+        const result = {added: 0, updatedIds: [], talents: []};
         on(store.count(), total => {
-          let newRows = 0;
           for (const row of rows) on(store.get([key, row.id]), previous => {
-            if (!previous && total + ++newRows > 10000) throw new Error('当前浏览器最多保存 10000 位达人，请先清理不需要的数据');
-            store.put({...previous, ...row, scope: key, collectedAt: now});
+            if (previous) result.updatedIds.push(row.id);
+            else if (total + ++result.added > 10000) throw new Error('当前浏览器最多保存 10000 位达人，请先清理不需要的数据');
+            const next = {...previous, ...row, scope: key, collectedAt: now};
+            store.put(next);
+            result.talents.push(publicRow(next));
           });
-          done(rows.length);
+          done(result);
         });
       });
     },
@@ -391,6 +413,30 @@ export async function openInviteStore() {
               records.add(row); done({created: true, record: publicRow(row)});
             });
           });
+        });
+      });
+    },
+    cancelInvitation(scope, talentId, taskId) {
+      const key = scopeKey(scope); identifier(talentId, '达人 ID'); identifier(taskId, '任务 ID');
+      return transaction(db, ['invitations'], 'readwrite', (tx, done, on) => {
+        const records = tx.objectStore('invitations');
+        on(records.get([key, talentId]), row => {
+          if (!row || row.taskId !== taskId || row.status !== 'sending') throw new Error('邀约记录不属于当前发送任务');
+          records.delete([key, talentId]); done({removed: true});
+        });
+      });
+    },
+    updateInvitation(scope, talentId, taskId, patch) {
+      const key = scopeKey(scope); identifier(talentId, '达人 ID'); identifier(taskId, '任务 ID');
+      return transaction(db, ['invitations'], 'readwrite', (tx, done, on) => {
+        const records = tx.objectStore('invitations');
+        on(records.get([key, talentId]), row => {
+          if (!row || row.taskId !== taskId || row.status !== 'sending') throw new Error('邀约记录不属于当前发送任务');
+          const next = {...row, updatedAt: new Date().toISOString()};
+          if (patch.note !== undefined) next.note = safeDetail(patch.note).slice(0, 1000);
+          if (patch.response === null) delete next.response;
+          else if (patch.response !== undefined) next.response = safeDetail(patch.response);
+          records.put(next); done(publicRow(next));
         });
       });
     },

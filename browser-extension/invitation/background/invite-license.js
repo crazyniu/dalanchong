@@ -12,11 +12,13 @@
  * Existing code bindings remain authoritative; never auto-unbind/rebind.
  * No network at import, no persisted validity, no verify-to-activate fallback, no logs.
  */
+import {testLicense} from '../../shared/build-mode.js';
+
 const API = 'https://dabudian.top/functions/v1/license-api';
 const APP_ID = 'dalanchong';
 const RULES_API = 'https://dabudian.top/functions/v1/extension-rules';
 const RULE_ACTIONS = new Set(['invite.validate', 'invite.decide', 'video.rank']);
-const STORAGE_KEY = 'invitationLicense';
+const STORAGE_KEY = testLicense ? 'invitationLicenseTest' : 'invitationLicense';
 const MAX_AGE = 10 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MESSAGES = Object.freeze({
@@ -39,6 +41,7 @@ function failure(reason) {
 function normalizeCode(value) {
   if (typeof value !== 'string' || value.length > 100) throw failure('invalid_license');
   const normalized = value.toUpperCase().replace(/[\s-]/g, '');
+  if (testLicense && normalized === testLicense.code) return normalized;
   if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{24}$/.test(normalized)) throw failure('invalid_license');
   return normalized;
 }
@@ -69,7 +72,7 @@ function rulesFailure(reason) {
     invalid_action: '不支持此云规则操作',
     invalid_input: '邀约或推荐参数不符合规则，请检查配置',
     rate_limited: '云规则请求过于频繁，请稍后重试',
-    unavailable: '云规则服务不可用，可能尚未部署；当前操作已停止',
+    unavailable: '云规则服务不可用，当前操作已停止',
   }[reason] || '云规则服务不可用';
   return Object.assign(new Error(message), {cloudRules: true, beforeSend: true, reason});
 }
@@ -194,7 +197,7 @@ export function createInviteLicense() {
     state = {checked: true, valid: false, reason, expiresAt: null};
   };
   function status() {
-    if (state.valid) {
+    if (state.valid && !(testLicense && savedCode === testLicense.code)) {
       const elapsed = performance.now() - checkedMonotonic;
       const wallElapsed = Date.now() - checkedWall;
       if (elapsed < 0 || wallElapsed < 0 || Math.max(elapsed, wallElapsed) >= lifetime)
@@ -210,6 +213,10 @@ export function createInviteLicense() {
     return current;
   }
   async function call(action, code) {
+    if (testLicense && code === testLicense.code) {
+      return {valid: true, reason: 'active', serverTime: Date.now(), expiresAt: null,
+        started: performance.now(), startedWall: Date.now()};
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     const started = performance.now(), startedWall = Date.now();
@@ -284,6 +291,8 @@ export function createInviteLicense() {
       await initialize();
       return serialize(async () => {
         requireValid();
+        if (testLicense && savedCode === testLicense.code)
+          return ruleResult(action, testLicense.evaluate(action, payload), payload);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 15000);
         try {

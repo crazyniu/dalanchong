@@ -66,7 +66,7 @@ function Workspace(){
  },[])
  useEffect(()=>{if(memory.ready&&accountId)void loadInvitationConfig().catch(e=>toast.error(String(e)))},[memory.ready,accountId])
  useEffect(()=>{if(memory.error)toast.error(memory.error)},[memory.error])
- const closeCompose=(open:boolean)=>{setComposeOpen(open);memory.setComposeWasOpen(open)}
+ const closeCompose=(open:boolean)=>{setComposeOpen(open);memory.setComposeWasOpen(open);if(!open){setPending(false);setInviteIds([])}}
  const run=async(fn:(assertCurrent:()=>void)=>Promise<unknown>)=>{const token=binding.current;const assertCurrent=workspaceActionGuard(()=>({active:mounted.current,key:binding.current}));setBusy(true);try{assertCurrent();await fn(assertCurrent);assertCurrent()}catch(e){if(mounted.current&&binding.current===token)toast.error(e instanceof Error?e.message:'操作失败')}finally{if(mounted.current&&binding.current===token)setBusy(false)}}
  const action=(event:ToolbarAction)=>{
  if(event.type==='view'){setListOpen(event.view==='list');return}
@@ -77,6 +77,7 @@ function Workspace(){
  const platform=context?.platform || 'douyin', collectTask=tasks[`${accountId}:collect`],inviteTask=tasks[`${accountId}:invite`]
  const openInvite=(ids:string[])=>{const store=useCommerce.getState();const config=store.configs[accountId]||{products:'',message:'',phone:'',wechat:'',interval:platform==='kuaishou'?2000:5000,maxInvites:null};store.saveConfig(accountId,{...config,interval:Math.max(platform==='kuaishou'?2000:5000,config.interval),maxInvites:null});setInviteIds(ids);closeCompose(true)}
  return <>
+ {status.collecting&&<div data-collection-mask className='absolute inset-0 z-20 cursor-wait bg-slate-950/15' role='status' aria-label='采集中'/>}
  <div data-layout-region className='floating-toolbar' style={{marginLeft:position.x,marginBottom:position.y}}>
  <CollectionToolbar state={{accountId,view:'collect',count:status.total||0,collecting:!!status.collecting,inviting:!!status.inviting,pendingInvite:!status.collecting&&(pending||memory.composeWasOpen),returning:false,navigationDisabled:busy||!status.readiness||status.collecting||status.inviting,disabled:!status.collecting&&(busy||!status.readiness),label:status.collecting?'停止采集':busy?'正在启动':!status.loggedIn?'网页未就绪':!status.readiness?'等待网页筛选':'开始采集'}} onAction={action} onMove={(x,y)=>setPosition(p=>({x:Math.max(-innerWidth/3,Math.min(innerWidth/3,p.x+x)),y:Math.max(0,Math.min(innerHeight-100,p.y-y))}))}/>
  </div>
@@ -89,7 +90,7 @@ function Workspace(){
  {logsOpen&&accountId&&<TaskLogsDialog open onOpenChange={setLogsOpen} platform={platform} accountId={accountId}/>}
  {recordsOpen&&accountId&&<RecordsDialog open onOpenChange={setRecordsOpen} records={[]} scope={{platform,accountId}}/>}
  {inviteTask?.status==='running'&&<div className='task-overlay-layer'><InviteProgress state={{tasks:[{name:accounts[0]?.name||'',platform,task:inviteTask}]}} onAction={()=>void run(()=>request('INVITE_STOP',{sessionId:session,kind:'invite'}))}/></div>}
- {collectTask&&!status.inviting&&<div className='task-overlay-layer collection-log-layer'><CollectionLog task={collectTask}/></div>}
+ {collectTask?.status==='running'&&!status.inviting&&<div className='task-overlay-layer collection-log-layer'><CollectionLog key={`${accountId}-${collectTask.startedAt}`} task={collectTask}/></div>}
  <Toaster/>
  </>
 }
@@ -111,7 +112,7 @@ async function boot(){
    const host=await request('INVITE_HOST_CONTEXT');parentOrigin=host.sourceOrigin
    if(stopped||token!==generation||!next.active())return
    root=createRoot(document.getElementById('root')!);root.render(<Workspace/>)
-  }catch{if(!stopped&&token===generation){const previous=connection;connection=undefined;previous?.close();if(token===generation){unmount();retry()}}}
+  }catch(error){if(!stopped&&token===generation){console.error('大懒虫邀约工作区连接失败',error);const previous=connection;connection=undefined;previous?.close();if(token===generation){unmount();retry()}}}
  }
  window.addEventListener('pagehide',()=>{stopped=true;generation++;if(timer)clearTimeout(timer);connection?.close();unmount()},{once:true})
  await connect()

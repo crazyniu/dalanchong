@@ -16,7 +16,7 @@ function setup() {
     createWorkspaceConnections:()=>({capture:()=>()=>{},closeAll(){}}),
     requireLicense(expected){if(!valid || expected!==undefined && expected!==epoch) throw Error('inactive');},
     inviteLicense:{status:()=>({valid}),requireValid(){if(!valid)throw Error('inactive');}},
-    readObservation:async()=>({account:{status:'online',shopId:'shop'},capture:{list:{}}}),
+    readObservation:async()=>({account:{status:'online',shopId:'shop'},capture:{list:{}},observations:[]}),
     chrome:{runtime:{},tabs:{onRemoved:{addListener(){}},onUpdated:{addListener(){}}}},
   });
   vm.runInContext(source+'\nglobalThis.api={state,toolbar,sessions,setRuntime(r,s){runtime=r;store=s;initialized=Promise.resolve();},replaceHandle(fn){handle=fn;}};',context);
@@ -52,7 +52,7 @@ test('stop during handler observation reaches the real collection runtime cancel
   f.api.sessions.set('s',makeSession('shop'));
   f.context.readObservation=async()=>{
     if(++reads===2){entered.resolve();await pending.promise;}
-    return{account:{status:'online',shopId:'shop'},capture:{list:{}}};
+    return{account:{status:'online',shopId:'shop'},capture:{list:{}},observations:[]};
   };
   f.runtime.startCollection=createInviteRuntime({store:f.store,license:{requireValid(){}}}).startCollection;
   const collecting=f.api.toolbar({type:'INVITE_TOOLBAR_COLLECT'},{...surface,kind:'toolbar'});
@@ -73,7 +73,7 @@ test('toolbar reports explicit account/list readiness and structured counters',a
  const result=await f.api.toolbar({type:'INVITE_TOOLBAR_STATUS'},{...surface,kind:'toolbar'});
  assert.equal(result.loggedIn,true);assert.equal(result.readiness,true);
  assert.equal(result.tasks[0].processed,24);assert.equal(result.tasks[0].review,1);
- f.context.readObservation=async()=>({account:{status:'online',shopId:'shop'},capture:null});
+ f.context.readObservation=async()=>({account:{status:'online',shopId:'shop'},capture:null,observations:[]});
  const notReady=await f.api.toolbar({type:'INVITE_TOOLBAR_STATUS'},{...surface,kind:'toolbar'});
  assert.equal(notReady.loggedIn,true);assert.equal(notReady.readiness,false);
 });

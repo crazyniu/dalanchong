@@ -15,6 +15,7 @@ function fixture() {
   const store = {
     async recover() { for (const row of records.values()) if (row.status === 'sending') row.status = 'review'; },
     async getTalent(_scope, id) { return {id, name: id}; },
+    async listTalentIds() { return ['1','2'].filter(id=>!records.has(id)); },
     async createTask(_scope, fields) { const row = {...fields, id: String(tasks.size + 1), status: 'running'}; tasks.set(row.id, row); return {...row}; },
     async updateTask(_scope, id, patch) { const row = {...tasks.get(id), ...patch}; tasks.set(id, row); return {...row}; },
     async reserveInvitation(_scope, row) {
@@ -22,6 +23,9 @@ function fixture() {
       records.set(row.talentId, {...row, status: 'sending'}); return {created: true};
     },
     async finishInvitation(_scope, id, patch) { records.set(id, {...records.get(id), ...patch}); },
+    async updateInvitation(_scope,id,_taskId,patch) { records.set(id,{...records.get(id),...patch}); },
+    async cancelInvitation(_scope,id) { records.delete(id); },
+    async appendTaskLog() {},
   };
   const license = {
     requireValid() { if (!valid) throw Object.assign(new Error('inactive'), {license: true, beforeSend: true}); },
@@ -76,26 +80,25 @@ test('stop during platform readiness check prevents dispatch', async () => {
   await f.runtime.startInvitation(scope, f.connection, config, ['1']);
   await entered.promise; f.runtime.stopAll(); pending.resolve();
   await eventually(() => f.tasks.get('1').status === 'stopped');
-  assert.equal(f.sent(), 0); assert.equal(f.records.get('1').status, 'failed');
+  assert.equal(f.sent(), 0); assert.equal(f.records.has('1'), false);
 });
 
-test('uncertain dispatched request is marked review and never retried', async () => {
+test('uncertain dispatched request retries the same record until stopped, then requires review', async () => {
   const f = fixture(), api = f.connection.api; let attempts = 0;
   f.connection.api = async (...args) => {
-    if (args[0].endsWith('/seller/create')) { args[4](); attempts++; throw new Error('response lost'); }
+    if (args[0].endsWith('/seller/create')) { args[4](); attempts++; if(attempts===2)f.runtime.stopAll(); throw new Error('response lost'); }
     return api(...args);
   };
   await f.runtime.startInvitation(scope, f.connection, config, ['1', '2']);
   await eventually(() => f.tasks.get('1').status === 'stopped');
-  assert.equal(attempts, 1); assert.equal(f.records.get('1').status, 'review');
+  assert.equal(attempts, 2); assert.equal(f.records.get('1').status, 'review');
   assert.equal(f.records.has('2'), false);
 });
 
-test('history deduplication skips without another send', async () => {
+test('history deduplication rejects an empty queue without another send', async () => {
   const f = fixture(); f.records.set('1', {status: 'success'});
-  await f.runtime.startInvitation(scope, f.connection, config, ['1']);
-  await eventually(() => f.tasks.get('1').status === 'completed');
-  assert.equal(f.sent(), 0); assert.equal(f.tasks.get('1').skipped, 1);
+  await assert.rejects(f.runtime.startInvitation(scope, f.connection, config, ['1']),/没有无邀约记录/);
+  assert.equal(f.sent(), 0); assert.equal(f.tasks.size, 0);
 });
 
 test('storage failure after successful send never retries platform request', async () => {
