@@ -1,6 +1,6 @@
 /**
  * AI module map
- * Purpose: explicitly prepare and poll one creator-source document from extension UI.
+ * Purpose: attach the workspace to an authorized page observer and read its source snapshot.
  * Entry: prepareObservation returns a session; read/watch provide validated observations.
  * Flow: fixed MAIN function pulls bounded snapshots; shared classifiers/parsers interpret data.
  * State: session pins browser document ID, route and page document nonce; versions reject regressions.

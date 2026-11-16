@@ -1,6 +1,7 @@
 /** License-driven per-document injection. No business scripts are registered persistently. */
 import {featureScripts} from '../shared/feature-scripts.js';
 import {assertInvitationAssets} from '../invitation/shared/workspace-assets.js';
+import {invitationObserver} from '../invitation/content/invite-observer.js';
 import {initializeLicense, licenseStatus, licenseEpoch, onLicenseChange} from './license-background.js';
 
 let chain = Promise.resolve();
@@ -77,6 +78,12 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (script.css) await chrome.scripting.insertCSS({target, files: script.css});
       if (!desired || !licenseStatus().valid || epoch !== licenseEpoch()) return {ok: false};
       await chrome.scripting.executeScript({target, world: script.world || 'ISOLATED', files: script.js, injectImmediately: script.runAt === 'document_start'});
+      if (script.id === 'licensed-invite-observer') {
+        if (!desired || !licenseStatus().valid || epoch !== licenseEpoch()) return {ok: false};
+        const platform = new URL(url).hostname === 'cps.kwaixiaodian.com' ? 'kuaishou' : 'douyin';
+        await chrome.scripting.executeScript({target, world: 'MAIN', injectImmediately: true,
+          func: invitationObserver, args: [platform, 'install', {lifecycleEpoch: epoch}]});
+      }
     }
     return {ok: true};
     });

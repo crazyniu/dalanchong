@@ -24,20 +24,18 @@ test('reconnect does not revive old document token; revocation expires live port
  h.manager.closeAll();assert.throws(()=>h.manager.capture(h.surface),/失效/);assert.equal(h.expired.length,2);
 });
 const source=await readFile(new URL('../browser-extension/invitation/background/invite-background.js',import.meta.url),'utf8');
-test('delayed NAV and COLLECT cannot outlive their iframe connection',async()=>{
- for(const type of ['INVITE_TOOLBAR_NAV','INVITE_TOOLBAR_COLLECT']) {
+test('delayed collection cannot outlive its iframe connection',async()=>{
   const h=harness(),p=h.port();await new Promise(setImmediate);let release,operations=0;
-  const context=vm.createContext({workspaceConnections:h.manager,toolbarGenerations:new Map(),initialize:()=>new Promise(r=>release=r),licenseEpoch:()=>0,requireLicense(){},sessions:new Map(),preparationFailures:new Map(),preparations:new Map(),handle(){operations++;},chrome:{tabs:{update(){operations++},goBack(){operations++},goForward(){operations++}}}});
+  const context=vm.createContext({workspaceConnections:h.manager,toolbarGenerations:new Map(),initialize:()=>new Promise(r=>release=r),licenseEpoch:()=>0,requireLicense(){},sessions:new Map(),preparationFailures:new Map(),preparations:new Map(),handle(){operations++;}});
   vm.runInContext(source.slice(source.indexOf('async function toolbar('),source.indexOf('function discardTab(')),context);
-  const result=context.toolbar({type,action:'home'},h.surface);p.disconnect();release();
+  const result=context.toolbar({type:'INVITE_TOOLBAR_COLLECT'},h.surface);p.disconnect();release();
   await assert.rejects(result,/关闭/);assert.equal(operations,0);
- }
 });
-test('navigation generation captured before initialize rejects queued action after route change',async()=>{
+test('route generation captured before initialize rejects queued collection after route change',async()=>{
  const h=harness();h.port();await new Promise(setImmediate);let release;
  const generations=new Map();const context=vm.createContext({workspaceConnections:h.manager,toolbarGenerations:generations,initialize:()=>new Promise(r=>release=r)});
  vm.runInContext(source.slice(source.indexOf('async function toolbar('),source.indexOf('function discardTab(')),context);
- const result=context.toolbar({type:'INVITE_TOOLBAR_NAV',action:'back'},h.surface);generations.set(9,1);release();await assert.rejects(result,/已改变/);
+ const result=context.toolbar({type:'INVITE_TOOLBAR_COLLECT'},h.surface);generations.set(9,1);release();await assert.rejects(result,/已改变/);
 });
 test('non-workspace or top-frame connections never acquire authority',async()=>{
  let connect;const manager=createWorkspaceConnections({runtime:{id:'test',getURL:p=>'chrome-extension://test/'+p,onConnect:{addListener:f=>connect=f}},initialize:async()=>{},verify(){}});

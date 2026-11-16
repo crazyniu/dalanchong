@@ -19,7 +19,6 @@ import {initializeLicense, publishLicenseState, onLicenseChange, licenseEpoch, r
 import {prepareObservation, readObservation} from './invite-observation.js';
 import {createInvitationConnection, refreshInvitationIdentity} from './invite-browser.js';
 import {createInviteRuntime} from './invite-runtime.js';
-import {invitationEntryUrls} from '../shared/invite-entry.js';
 
 const sessions = new Map();
 const preparing = new Map();
@@ -214,7 +213,7 @@ listenMessages(types, (message, sender, respond) => {
   }
   void handle(message, surface).then(payload => respond({ok:true,...payload}), error => respond({ok:false,error:error.message}));
 });
-const toolbarTypes = new Set(['INVITE_TOOLBAR_STATUS','INVITE_TOOLBAR_COLLECT','INVITE_TOOLBAR_STOP','INVITE_TOOLBAR_NAV']);
+const toolbarTypes = new Set(['INVITE_TOOLBAR_STATUS','INVITE_TOOLBAR_COLLECT','INVITE_TOOLBAR_STOP']);
 listenMessages(toolbarTypes, (message, sender, respond) => {
   const surface = invitationSurface(sender, chrome.runtime);
   if (surface?.kind !== 'embedded') { respond({ok:false,error:'来源页面不匹配'}); return; }
@@ -257,16 +256,7 @@ async function toolbar(message, surface) {
   }
   const session = entry?.[1];
   const tasks = session?.scope ? runtime.status().filter(t => t.platform === session.scope.platform && t.platformAccountId === session.scope.platformAccountId) : [];
-  const active = tasks.filter(t => t.status === 'running');
   requireLicense(epoch);
-  if (message.type === 'INVITE_TOOLBAR_NAV') {
-    check();
-    if (active.length) throw new Error('请先停止当前任务');
-    if (message.action === 'back') await chrome.tabs.goBack(surface.tabId);
-    else if (message.action === 'forward') await chrome.tabs.goForward(surface.tabId);
-    else if (message.action === 'home') await chrome.tabs.update(surface.tabId,{url:invitationEntryUrls[surface.source.platform]});
-    else throw new Error('导航操作无效');
-  }
   check();
   if (message.type === 'INVITE_TOOLBAR_STOP' && session?.scope) runtime.stop(session.scope, 'collect');
   if (message.type === 'INVITE_TOOLBAR_COLLECT') {

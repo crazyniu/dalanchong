@@ -1,6 +1,14 @@
 /** Licensed injection inventory; source paths and match rules remain explicit. */
 export const featureScripts = [
   {
+    matches: ["https://buyin.jinritemai.com/*", "https://cps.kwaixiaodian.com/*"],
+    js: ["content/feature-gate.js"],
+    world: "MAIN",
+    id: "licensed-invite-observer",
+    runAt: "document_start",
+    allFrames: false
+  },
+  {
     "matches": [
       "http://*/*",
       "https://*/*"

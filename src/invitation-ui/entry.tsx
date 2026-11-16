@@ -72,14 +72,14 @@ function Workspace(){
  if(event.type==='view'){setListOpen(event.view==='list');return}
  if(event.type==='logs'){setLogsOpen(true);return}if(event.type==='records'){setRecordsOpen(true);return}
  if(event.type==='return'){void run(async assertCurrent=>{const observed=await invitationRequest('INVITE_OBSERVE');assertCurrent();if(observed.observation?.account?.status!=='online'||observed.observation?.account?.shopId!==accountId)throw Error('请先完成当前账号登录');const ids=await invitationRuntime.queryData<string[]>({kind:'invite_ids',platform:context?.platform,accountId,ids:inviteIds});assertCurrent();if(!ids.length)throw Error('没有无邀约记录的达人');setInviteIds(ids);setListOpen(true);closeCompose(true);setPending(false)});return}
- void run(()=>request(event.type==='collect'?'INVITE_TOOLBAR_COLLECT':event.type==='stop'?'INVITE_TOOLBAR_STOP':'INVITE_TOOLBAR_NAV',{action:event.type}))
+ void run(()=>request(event.type==='collect'?'INVITE_TOOLBAR_COLLECT':'INVITE_TOOLBAR_STOP'))
  }
  const platform=context?.platform || 'douyin', collectTask=tasks[`${accountId}:collect`],inviteTask=tasks[`${accountId}:invite`]
  const openInvite=(ids:string[])=>{const store=useCommerce.getState();const config=store.configs[accountId]||{products:'',message:'',phone:'',wechat:'',interval:platform==='kuaishou'?2000:5000,maxInvites:null};store.saveConfig(accountId,{...config,interval:Math.max(platform==='kuaishou'?2000:5000,config.interval),maxInvites:null});setInviteIds(ids);closeCompose(true)}
  return <>
  {status.collecting&&<div data-collection-mask className='absolute inset-0 z-20 cursor-wait bg-slate-950/15' role='status' aria-label='采集中'/>}
  <div data-layout-region className='floating-toolbar' style={{marginLeft:position.x,marginBottom:position.y}}>
- <CollectionToolbar state={{accountId,view:'collect',count:status.total||0,collecting:!!status.collecting,inviting:!!status.inviting,pendingInvite:!status.collecting&&(pending||memory.composeWasOpen),returning:false,navigationDisabled:busy||!status.readiness||status.collecting||status.inviting,disabled:!status.collecting&&(busy||!status.readiness),label:status.collecting?'停止采集':busy?'正在启动':!status.loggedIn?'网页未就绪':!status.readiness?'等待网页筛选':'开始采集'}} onAction={action} onMove={(x,y)=>setPosition(p=>({x:Math.max(-innerWidth/3,Math.min(innerWidth/3,p.x+x)),y:Math.max(0,Math.min(innerHeight-100,p.y-y))}))}/>
+ <CollectionToolbar state={{accountId,view:'collect',count:status.total||0,collecting:!!status.collecting,pendingInvite:!status.collecting&&(pending||memory.composeWasOpen),returning:false,disabled:!status.collecting&&(busy||!status.readiness),label:status.collecting?'停止采集':busy?'正在启动':!status.loggedIn?'网页未就绪':!status.readiness?'等待网页筛选':'开始采集'}} onAction={action} onMove={(x,y)=>setPosition(p=>({x:Math.max(-innerWidth/3,Math.min(innerWidth/3,p.x+x)),y:Math.max(0,Math.min(innerHeight-100,p.y-y))}))}/>
  </div>
  <Dialog open={listOpen} onOpenChange={setListOpen}>
  <DialogContent className='flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-[1180px]'>

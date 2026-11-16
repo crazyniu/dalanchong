@@ -1,6 +1,6 @@
 /**
  * AI module map
- * Purpose: observe allowlisted platform requests after explicit browser preparation.
+ * Purpose: observe allowlisted platform requests as soon as the page receives authorization.
  * Entry: invitationObserver is serialized into the top MAIN world by scripting.executeScript.
  * Flow: fetch/XHR clones feed bounded redacted latest slots; snapshot is pulled by extension code.
  * State: per-document route revision and monotonically increasing request sequence reject stale results.
