@@ -345,6 +345,10 @@ export function invitationObserver(platform, action = 'install', payload = {}) {
     if (operation === 'snapshot') return {
       documentId, pageUrl, routeRevision, observations: [...observations.values()],
     }
+    if (operation === 'identity') return {
+      documentId, pageUrl, routeRevision,
+      observations: observations.has('account') ? [observations.get('account')] : [],
+    }
     if (operation === 'markOwn') {
       const path = new URL(value.path, origin)
       if (path.origin !== origin || !paths[path.pathname]) throw Error('非观察接口')

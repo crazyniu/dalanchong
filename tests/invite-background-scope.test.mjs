@@ -10,7 +10,7 @@ function setup() {
   let valid=true, epoch=0;
   const tasks=[], stored=[], stops=[];
   const runtime={status:()=>tasks,stop:scope=>stops.push(scope),stopAll(){},recoverScope:async()=>{}};
-  const store={listTasks:async scope=>stored.filter(t=>t.platformAccountId===scope.platformAccountId),listTalentIds:async()=>[]};
+  const store={listTasks:async scope=>stored.filter(t=>t.platformAccountId===scope.platformAccountId),countTalents:async()=>0,listTalentIds:async()=>[]};
   const context=vm.createContext({Map,Set,Date,URL,crypto,setTimeout,
     onLicenseChange(){},listenMessages(){},licenseEpoch:()=>epoch,initializeLicense:async()=>{},
     createWorkspaceConnections:()=>({capture:()=>()=>{},closeAll(){}}),

@@ -125,8 +125,11 @@ export async function readObservation(session) {
   return validateSnapshot(session, await invoke(session, 'snapshot'));
 }
 
+export async function readIdentityObservation(session) {
+  return validateSnapshot(session, await invoke(session, 'identity'));
+}
+
 export async function markOwnObservation(session, path, body) {
-  await readObservation(session);
   const url = new URL(path, session.pageUrl);
   if (!classifyObservedRequest(session.platform, url.href, body, session.pageUrl))
     throw Error('不能标记当前来源以外的请求。');

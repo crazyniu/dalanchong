@@ -166,7 +166,7 @@ export function createInviteRuntime({store, license, onChange = () => {}}) {
         let nextAt = 0;
         await collect({platform: scope.platform, capture: snapshot, stopped: () => job.stopped,
           request: async (path, body) => {
-            await wait(job, nextAt); await check(job);
+            await wait(job, nextAt);
             try { return await connection.api(path, body, undefined, undefined, () => beforeDispatch(job)); } finally { nextAt = Date.now() + 1000; }
           },
           progress: async (count, text, batch) => {

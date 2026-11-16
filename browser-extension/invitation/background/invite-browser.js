@@ -1,25 +1,31 @@
 /**
  * AI module map
  * Purpose: adapt the shared platform API to one verified Chromium document.
- * Entry: createInvitationConnection(session, license) returns assertIdentity/api.
- * Flow: read current observed account, check the independent license, suppress own
+ * Entry: createInvitationConnection binds the prepared account and returns assertIdentity/api.
+ * Flow: read only observed account/route state, check the independent license, suppress own
  * list replays, and inject only the shared fixed request function into MAIN world.
  * Boundary: no arbitrary scripts or remote messages; page data is untrusted and
  * cannot grant authorization. Closed/navigated documents stop, never select a fallback.
+ * Account HTTP lookup belongs to page preparation, not individual collection requests.
  */
 import {makeApi, classifyObservedRequest, interpretObservedResponse} from '../core/platform.mjs';
 import {licenseEpoch, requireLicense} from '../../background/license-background.js';
-import {readObservation, markOwnObservation, releaseOwnObservation} from './invite-observation.js';
+import {readIdentityObservation, markOwnObservation, releaseOwnObservation} from './invite-observation.js';
 
-export function createInvitationConnection(session, license, scope, onSend = () => {}) {
+export function createInvitationConnection(session, license, scope, account, onSend = () => {}) {
   const assertIdentity = async expectedScope => {
     let snapshot;
-    try { snapshot = await readObservation(session); snapshot.account = await refreshInvitationIdentity(session); }
+    try {
+      snapshot = await readIdentityObservation(session);
+      const observed = snapshot.observations.find(item => item.kind === 'account');
+      if (observed?.error) throw new Error(observed.error);
+      if (snapshot.account) account = snapshot.account;
+    }
     catch (error) { throw Object.assign(error, {login: true, beforeSend: true}); }
-    if (expectedScope.platform !== session.platform || snapshot.account?.status !== 'online' ||
-        snapshot.account.shopId !== expectedScope.platformAccountId)
+    if (expectedScope.platform !== session.platform || account.status !== 'online' ||
+        account.shopId !== expectedScope.platformAccountId)
       throw Object.assign(new Error('平台登录账号已变化，请重新准备'), {login: true, beforeSend: true});
-    return snapshot;
+    return {...snapshot, account};
   };
   const api = (path, body, method, onResponse, beforeDispatch = () => {}) => makeApi({
     getURL: () => session.pageUrl,

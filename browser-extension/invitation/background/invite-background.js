@@ -81,7 +81,7 @@ async function observe(session) {
     const status = inviteLicense.status();
     session.scope = {userId: status.principalId, platform: session.page.platform, platformAccountId: observation.account.shopId};
     await runtime.recoverScope(session.scope);
-    session.connection = createInvitationConnection(session.page, inviteLicense, session.scope, () => {
+    session.connection = createInvitationConnection(session.page, inviteLicense, session.scope, session.account, () => {
       session.quota = null;
       session.quotaSequence = session.page.versions.get('quota')?.sequence;
     });
@@ -263,7 +263,7 @@ async function toolbar(message, surface) {
     check();
     await handle({type:'INVITE_COLLECT',sessionId:entry[0]},surface,() => generation !== (toolbarGenerations.get(surface.tabId) || 0),check);
   }
-  const total = session?.scope ? (await store.listTalentIds(session.scope, {})).length : 0;
+  const total = session?.scope ? await store.countTalents(session.scope) : 0;
   requireLicense(epoch);
   const current = session?.scope ? runtime.status().filter(t => t.platform === session.scope.platform && t.platformAccountId === session.scope.platformAccountId && t.status === 'running') : [];
   const loggedIn = session?.account?.status === 'online' && !!session?.scope;
